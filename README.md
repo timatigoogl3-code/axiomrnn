@@ -77,8 +77,8 @@ Built artifacts, verified locally. These carry the fixes; the published 0.1.1
 does not:
 
 ```
-dist/axiomrnn-0.1.1-py3-none-any.whl    75,567 bytes, 18 files
-dist/axiomrnn-0.1.1.tar.gz             481,939 bytes
+dist/axiomrnn-0.1.1-py3-none-any.whl    75,807 bytes, 18 files
+dist/axiomrnn-0.1.1.tar.gz             482,493 bytes
 ```
 
 `MEASURED` — `python -m build` then `ls -l dist/`, in the repository root. The
