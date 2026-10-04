@@ -749,7 +749,7 @@ printed above.
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | the same five-minute path, expanded |
 | [`examples/README.md`](examples/README.md) | all 23 examples, each with its real output and the command that produced it |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | what we deliberately do **not** build, and the four packages |
-| [`docs/UX_RULES.md`](docs/UX_RULES.md) | 20 rules, each grown from a specific failure |
+| [`docs/UX_RULES.md`](docs/UX_RULES.md) | 24 rules, each grown from a specific failure — §21–§24 are the ones this pass added |
 | [`docs/ATTACKING_THE_QUADRATIC.md`](docs/ATTACKING_THE_QUADRATIC.md) | an independent attack on the premise: replacing the KV cache with a spike-gated fast-weight state |
 | [`docs/DESIGN_LOG.md`](docs/DESIGN_LOG.md) | the original design record (Russian, unedited) |
 

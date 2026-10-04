@@ -99,6 +99,11 @@ read this before trusting a credit-rule figure.
   `neuron_model`, `spike_rate <= 0`, `timesteps < 1`. Each previously returned a
   confident number for a request that did not mean anything.
 
+- **Rules 21–24 in `docs/UX_RULES.md`**, one per defect above: a test must
+  exercise the code that ships; a value compared by identity is not a value; a
+  cap that is not a decision is an undercount; a published claim must survive
+  its own first reader.
+
 ### Changed
 
 - `axplan/memory.py` docstring no longer quotes `96.0% vs 96.5% in ICLR'26` or
@@ -110,6 +115,24 @@ read this before trusting a credit-rule figure.
 - README no longer says the package is unpublished. It is on PyPI as 0.1.0 and
   0.1.1, uploaded 2026-10-04, and the page now states plainly that the
   installed version carries the two planner defects above.
+
+### Numbers that moved, and why
+
+The BPTT cap was an undercount, so **every published peak is now larger**. If
+you have a number from an earlier copy of the docs, it is an underestimate:
+
+| figure | was | is |
+|---|---:|---:|
+| `02_budget.py`, width 1024, `T=256` | 0.78 GiB | **1.57 GiB** |
+| `02_budget.py`, width 12288 | 4.38 GiB | **13.84 GiB** |
+| width at which a 6 GB card stops fitting | 20480 | **12288** |
+| `1B connections at T=1000`, BPTT | "fits in 5 GiB" | **10.23 GiB** |
+| `1B connections at T=1000`, local rule | not quoted | **5.96 GiB** |
+
+`README.md`, `docs/GETTING_STARTED.md` and `examples/README.md` were re-measured
+after the fix. The suite timings in the README were re-measured too and are now
+quoted as ranges over repeated runs, because the machine was under varying load
+and a single sample was not the honest form.
 
 ## [0.1.1] — 2026-10-04
 

@@ -496,6 +496,95 @@ byte-identical output, no discrepancy).
 
 ---
 
+## 21. A test must exercise the code that ships
+
+`tests/run_all.py` ran its memory-model suite as `../verify/test_cost.py`. That
+file is outside the repository, absent from the wheel and the sdist, and began
+with `sys.path.insert(0, '/home/cune')` before importing `axon.cost` from
+`/home/cune/axon/cost.py`. So it printed 38 `[ok]` lines about a module no
+installation contains, and on a fresh clone — including every GitHub runner —
+it could not run at all.
+
+It also tested a **stale predecessor** of the shipped `axplan/memory.py`. That
+is the part that cost something: the suite meant to catch the two planner
+defects in §22 and §23 was checking a dead copy of the arithmetic, so it could
+not have caught them.
+
+**Check:** `tests/test_memory.py` imports `axplan.memory` — the module the
+wheel ships — and the gate's `MEMORY MODEL` entry names that file. §14 applies:
+the two defects were reproduced against the published 0.1.1 wheel and pinned as
+regressions, so a reintroduction turns the suite red rather than merely
+undocumented.
+
+---
+
+## 22. A value compared by identity is not a value
+
+`CreditRule` is a `str`-Enum. `credit_bytes()` dispatched with
+`if rule is CreditRule.LOCAL`, and `axplan/memory.py` passed the bare string
+`"local"`. The string *equals* the member — `CreditRule.LOCAL == "local"` is
+`True` — but is never *identical* to it, so the test failed and execution fell
+through to the BPTT branch.
+
+The failure was silent and confidently wrong. `depends_on_T` came back `True`
+for a rule documented as T-independent, `quality_kept` came back `1.0` where
+the documentation says `0.389` at `T=500`, and `analyse()` charged BPTT bytes
+for a local-rule request. Every number was plausible; none was the number
+asked for. `releases 0.1.1` shipped this.
+
+**Check:** `credit_bytes()` normalises `rule` and `neuron` through their enums
+before anything else, so a string and its member are the same request and an
+unknown value raises `ValueError` instead of becoming BPTT.
+`tests/test_memory.py` T7 asserts that `"local"` and `CreditRule.LOCAL` take the
+same branch, and that an unknown rule is refused rather than answered.
+
+---
+
+## 23. A cap that is not a decision is an undercount
+
+`backward_bytes()` truncated the BPTT tape at `CreditModel.horizon()` — the
+number of steps over which credit decays below `eps`. Measured against the
+published wheel:
+
+```
+T=100 : 294,801,408 B
+T=400 : 294,801,408 B     identical
+```
+
+Four times the horizon charged at the same price, which contradicts the
+`credit_rule` field's own `Theta(T*A)` and made every published "needed GiB"
+figure an underestimate. Truncated BPTT is a legitimate technique — `credit.py`
+already exposes it as `credit_k` — but applying it silently by default is a
+planner under-reporting, and the difference between the two is exactly the kind
+of thing a reader cannot detect.
+
+**Check:** BPTT is `Theta(T*A)` again, so `T=400` costs exactly 4x `T=100`, and
+`tests/test_memory.py` asserts both the ratio and that the tape is *not* capped
+at the credit horizon. The credit horizon still sets `MemoryPlan.credit_horizon`,
+which is a statement about credit rather than about tape length.
+
+---
+
+## 24. A published claim must survive its own first reader
+
+Two things in this repository were true in the source and false in the artifact:
+
+- every `[project.urls]` entry read `github.com/timatigoogl3-code/axiomrnn`,
+  a third party's account, while `git remote` said `cubetitled-ui`. Nothing in
+  the gate compared a string to a remote, because every other suite calls
+  functions and checks behaviour;
+- the wheel advertised `Programming Language :: Python :: 3.14` while
+  `requires-python` capped it at `<3.14`. The classifier is what a reader sees
+  before installing.
+
+**Check:** `tests/test_api_surface.py` reads `pyproject.toml`, resolves the
+expected repository from `git remote get-url origin`, and asserts the URLs, the
+LICENSE attribution, and that every Python classifier falls inside
+`requires-python`. Verified by sabotage: reinstating the old URLs and the 3.14
+classifier turns 9 checks red.
+
+---
+
 ## Summary: what makes this framework trustworthy to a user
 
 | Property | How it is enforced |
@@ -511,3 +600,7 @@ byte-identical output, no discrepancy).
 | Honest when a tool is useless | §15 the planner says "no cuts" |
 | Self-consistent | §19 a limit and its recommendation are on the same axis |
 | Agreement is earned | §20 prove the check can disagree, before believing that it agreed |
+| Tests the shipped code | §21 the suite imports the module the wheel ships |
+| Identity is not equality | §22 normalise through the enum before comparing |
+| No silent caps | §23 a truncation that is not a decision is an undercount |
+| The artifact is checked too | §24 metadata is part of what you ship |
