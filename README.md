@@ -433,9 +433,38 @@ and `1.24e-04`, and separately checks that the kernel *calls the hook*
 
 ---
 
-## The four places this codebase silently broke
+## The silent breaks, including two still published
 
-Found by the gate, invisible to the eye, documented so they cannot return:
+Every item here produced a plausible number rather than an error. That is the
+category that matters: a crash announces itself, a wrong figure does not.
+
+**0. Two of them shipped to PyPI in 0.1.1 and are in every install.** They are
+first because they are the reason this section exists now, and because a reader
+who installed the package has both of them:
+
+- **`credit_rule="local"` was answered with BPTT arithmetic.** A `str`-Enum
+  member compared with `is` against the bare string `"local"` never matches, so
+  the local branch was unreachable and the planner reported the local rule's
+  memory as though it grew with the horizon — while its own docstring said
+  `Theta(S)`, T-independent. Reproduced against the published wheel:
+  `depends_on_T = True` where the documentation says `False`, and
+  `quality_kept = 1.0` where it says `0.389` at `T=500`.
+- **Peak memory was capped at the credit horizon.** `T=100` and `T=400` cost
+  the same, because the BPTT tape was truncated at the credit-decay horizon.
+  Four times the sequence for the same price, and every "needed GiB" figure
+  this project published was an underestimate. `T=400` now costs exactly 4x
+  `T=100`.
+
+Both are fixed here, both are pinned by regression checks, and neither is in
+the version you can install. See [Install](#install).
+
+**A third did not even reach a green suite.** The `MEMORY MODEL` gate entry ran
+`../verify/test_cost.py` — outside the repository, absent from the wheel,
+importing a module from `/home/cune`. Thirty-eight green checks, none of them
+about code a user receives, and on a fresh clone the suite could not run at all.
+That is why the two defects above survived: the suite meant to catch them was
+checking a dead copy. It is now `tests/test_memory.py`, against the shipped
+module.
 
 **1. The 1/T normalisation.** With a mean readout the maths requires
 `dL/ds_t = (1/T)·dL/dmean`. Without it the gradient grows linearly with the
@@ -471,12 +500,16 @@ the kernel in the opposite direction and confirming the test fails.
 Full account, including the mistakes made while finding all four:
 [`docs/UX_RULES.md`](docs/UX_RULES.md).
 
-`MEASURED` note on the count: this list is **four** silent breaks of the
-kind "no error, just a quietly wrong model". `docs/UX_RULES.md:209` separately
-enumerates **five** backward-pass and algorithmic errors the gate caught — a
-`(1−s)` factor on the wrong term, an inverted time recursion, a `dL/dthr` with
-no path through the reset, an early `return` in the DP, and a wrong tuple field
-in the Pareto filter. Two lists, two scopes, nine bugs in total.
+`MEASURED` note on the count: the numbered list below is **four** silent breaks
+of the kind "no error, just a quietly wrong model", and items **0** above add
+two more that reached PyPI, so **six** in total are described on this page.
+`docs/UX_RULES.md:209` separately enumerates **five** backward-pass and
+algorithmic errors the gate caught — a `(1−s)` factor on the wrong term, an
+inverted time recursion, a `dL/dthr` with no path through the reset, an early
+`return` in the DP, and a wrong tuple field in the Pareto filter. Two lists,
+two scopes, **eleven** bugs. The common property is that every one of them was
+invisible to inspection and would have been invisible to any test that did not
+specifically look for it.
 
 ---
 
