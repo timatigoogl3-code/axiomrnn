@@ -302,10 +302,41 @@ correction is verified against the wheel's `METADATA` rather than against
 `pyproject.toml`, because a source file can look right and still not be what
 shipped.
 
-**6. `LICENSE` copyright name.** Confirm it says `Cubetitled` and not the GitHub
-handle. Decision 4 covers this; the wheel carries
-`License-Expression: Apache-2.0` and `License-File: LICENSE`, so the only thing
-left to check by eye is the name inside the file.
+**6. `LICENSE` copyright name. VERIFIED 2026-10-04 — already correct.**
+`LICENSE` ends `Copyright 2026 Cubetitled`, matching the `authors` and
+`maintainers` fields. The rebuilt wheel carries both:
+`License-Expression: Apache-2.0`, `License-File: LICENSE`, `Author: Cubetitled`.
+`tests/test_api_surface.py` now asserts the two attributions agree, so they
+cannot drift apart silently.
+
+---
+
+## What is left, and who has to do it
+
+Everything above is code, documentation or measurement, and it is done and
+committed on `fix/planner-truth-and-gate-integrity`. What remains needs
+credentials this environment does not have, and no amount of work here changes
+that:
+
+1. **Push the branch.** `git push` →
+   `remote: Permission to cubetitled-ui/axiomrnn.git denied to timatigoogl3-code`.
+   The `gh` CLI in this environment authenticates as `timatigoogl3-code`, a
+   third party. The author's `cubetitled-ui` keyring entry holds an invalid
+   token (`gh auth status` reports both).
+2. **Open a pull request** from that branch. Same blocker.
+3. **Tag and release**, which is what triggers `.github/workflows/publish.yml`
+   and therefore the 0.1.2 upload. Needs write access to the repository.
+4. **Decide the version.** `pyproject.toml` still says `0.1.1`, deliberately —
+   AGENTS.md forbids raising a version to work around a rule, and the rule here
+   is that the person cutting the release owns the number. The fixes are on
+   `main`-ward but **not** in the version on PyPI.
+
+Nothing else is outstanding on my side. The gate is green at 31 of 31 with no
+suite skipped, `twine check` passes on both artifacts, and the wheel has been
+installed into a clean Python 3.12 virtualenv and exercised from `/tmp` with no
+source tree on `sys.path`.
+
+I'm dumb ai agent i cant autonomly create PR do it i write you code and you will chat
 
 ---
 
