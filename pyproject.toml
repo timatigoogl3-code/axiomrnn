@@ -61,11 +61,16 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
+    # These five must stay a subset of `requires-python` above, which is
+    # >=3.10,<3.14. The 3.14 classifier was here while the cap was not, so
+    # the published wheel advertised an interpreter that pip then refused to
+    # install on. PyPI classifiers are a claim; requires-python is the
+    # contract. A classifier the resolver contradicts is worse than a missing
+    # one, because it is the one a user reads before installing.
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -124,11 +129,17 @@ dev = [
 [project.scripts]
 axiomrnn-explain = "axiomrnn:main_explain"
 
+# MEASURED against the shipped wheel, not against this file: the 0.1.1 METADATA
+# carried all four of these as timatigoogl3-code/axiomrnn, which is the
+# third-party account this environment's `gh` is authenticated as -- not the
+# author's. `git remote -v` has always said cubetitled-ui. A wrong Source URL on
+# a PyPI page sends every reader to somebody else's repository, and no test in
+# this project can see it, because nothing compares these strings to the remote.
 [project.urls]
-Documentation = "https://github.com/timatigoogl3-code/axiomrnn#readme"
-Source = "https://github.com/timatigoogl3-code/axiomrnn"
-Issues = "https://github.com/timatigoogl3-code/axiomrnn/issues"
-Changelog = "https://github.com/timatigoogl3-code/axiomrnn/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/cubetitled-ui/axiomrnn#readme"
+Source = "https://github.com/cubetitled-ui/axiomrnn"
+Issues = "https://github.com/cubetitled-ui/axiomrnn/issues"
+Changelog = "https://github.com/cubetitled-ui/axiomrnn/blob/main/CHANGELOG.md"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # УПАКОВКА.

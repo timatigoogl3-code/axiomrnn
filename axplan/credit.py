@@ -139,7 +139,22 @@ def credit_bytes(rule: CreditRule, neuron: NeuronModel, connections: int,
     LOCAL: fp32 trace per synapse, independent of T. Here we do NOT multiply
            by batch: the trace accumulates across the batch WITHIN a step,
            it is not stored per example.
+
+    `rule` and `neuron` are normalised through their enums before anything
+    else. This is not tidiness. The dispatch below used to be `is
+    CreditRule.LOCAL`, and because CreditRule is a str-Enum a caller passing
+    the plain string 'local' -- which axplan.memory.backward_bytes did, via
+    the module-level `_LOCAL = 'local'` -- failed the identity test and fell
+    through to the BPTT branch. The local rule then reported
+    depends_on_T=True and quality_kept=1.0, the exact opposite of what this
+    module documents, and no caller could tell: the answer was a plausible
+    number, not an error. Normalising first makes a string and its enum
+    member the same request, and makes an unknown rule raise instead of
+    silently becoming BPTT.
     """
+    rule = CreditRule(rule)
+    neuron = NeuronModel(neuron)
+
     if rule is CreditRule.LOCAL:
         per_syn = TRACE_BYTES[neuron]
         return CreditPlan(

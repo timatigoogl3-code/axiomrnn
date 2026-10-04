@@ -159,9 +159,9 @@ Network: 2 spiking layers of 1024, output into 1000 classes, `T=256`, batch 32.
 
 ```
   budget                    usable      needed     fits?
-  consumer 6 GB           4.12 GiB    0.78 GiB       yes
-  pro 24 GB              17.96 GiB    0.78 GiB       yes
-  datacenter 80 GB       61.04 GiB    0.78 GiB       yes
+  consumer 6 GB           4.12 GiB    1.57 GiB       yes
+  pro 24 GB              17.96 GiB    1.57 GiB       yes
+  datacenter 80 GB       61.04 GiB    1.57 GiB       yes
 ```
 
 `4.12 GiB` is what a 6 GB card really gives you: the CUDA context, cuBLAS
@@ -171,16 +171,23 @@ Now the width grows and the budget starts to bind:
 
 ```
   width       needed GiB     6 GB    80 GB
-  1024              0.78      yes      yes
-  4096              1.67      yes      yes
-  12288             4.38      yes      yes
-  16384             5.92      yes      yes
-  20480             7.58       NO      yes
-  24576             9.37       NO      yes
+  1024              1.57      yes      yes
+  4096              4.82      yes      yes
+  12288            13.84       NO      yes
+  16384            18.53       NO      yes
+  20480            23.35       NO      yes
+  24576            28.30       NO      yes
 ```
 
-The planner found the width-20480 wall on its own. One line of code, different
+The planner found the width-12288 wall on its own. One line of code, different
 budgets, different answers.
+
+**Every figure in this block was larger before 2026-10-04 and the old ones were
+wrong.** `axplan.memory.backward_bytes` capped the BPTT tape at the credit
+horizon, so most of `T=256` was charged at no cost. The fix raises these
+numbers — width 12288 now needs 13.84 GiB where it previously reported 4.38 —
+and it moves the wall where it crosses 6 GiB from 20480 down to 12288. If you
+read an older copy of this file, its peaks are underestimates.
 
 And the credit rule, which is the actual lever:
 
@@ -196,14 +203,17 @@ And the credit rule, which is the actual lever:
     at T=256: ~64.7% of BPTT
 ```
 
-**Known defect in this example's output, `MEASURED`:** the report block is
-printed **twice**, identically. `axiomrnn-explain --budget 6gb` produces a
-162-line file where the same 81-line report appears at lines 1–81 and again at
-82–162. Reported to the owner.
+**Both defects in this example's output were fixed 2026-10-04**, and both are
+recorded here because the numbers above are the corrected ones:
 
-**Known defect in this example's text, `MEASURED`:** the "VERIFIED, AND NOT"
-block claims `tests/run_all.py 18 suites`. The gate runs **28**. It is a
-stale string in the example's source, not in this file.
+- The report block was printed **twice**, identically: `explain()` prints by
+  default *and* returns the report, so `print(spec.explain(...))` emitted
+  162 lines where the same 81-line report appeared at 1–81 and again at 82–162.
+  The example now passes `verbose=False` and prints the return value once.
+- The "VERIFIED, AND NOT" block claimed `tests/run_all.py 18 suites` while the
+  gate ran 28. That string is no longer hardcoded at all: the report reads the
+  count out of `tests/run_all.py` at run time and prints `31 suites`, because a
+  number a human types once goes stale silently — this file went stale twice.
 
 ### 03 — your neuron, no fork
 
@@ -472,17 +482,21 @@ measures quality:
      32                0.9217   +0.1733
 ```
 
-**Formatting defect, `MEASURED`:** the embedded `explain()` report inside this
-example is truncated mid-sentence and prints fragments, identically with and
-without TensorFlow:
+**Formatting defect, `MEASURED` — fixed 2026-10-04.** The embedded `explain()`
+report inside this example was truncated mid-sentence and printed fragments,
+identically with and without TensorFlow:
 
 ```
     We do NOT claim e-prop is better. We say what it costs and what
       tests/run_all.py       18 suites: memory model, credit rules, TF
 ```
 
-`We say what it costs and what` stops mid-sentence and the next line belongs
-to a different section. Reported to the owner.
+`We say what it costs and what` stopped mid-sentence because the console filter
+in the gate keeps only lines matching `PASS`/`ok]`/`Error`/`Traceback`/
+`SKIPPED`, and that report is a few hundred lines of prose. The `18 suites`
+line was a second instance of the same stale literal. What this example
+actually prints is in the block above; the gate's job here is only to confirm
+the run did not crash.
 
 ### adv 03 — the credit rule is the lever, not the bit
 
@@ -1057,24 +1071,30 @@ guess with a decimal point in it.
 
 ## Defects this pass found in the examples themselves
 
-`MEASURED` — all of these were observed in this session's output. None is
-fixed here, because none of these files belongs to the documentation path.
-Each was reported to its owner.
+`MEASURED` — every row was reproduced with a command. The **state** column is
+the honest one: a defect still open is a reason to distrust a figure in this
+file, and saying so is cheaper than a reader finding out.
 
-| # | file | defect |
-|---|---|---|
-| A | `04_equal_budget.py` | **not a gate suite.** `tests/run_all.py:86-89` says "every example is now a suite"; 19 of 20 are. The spiking-vs-dense number is ungated. |
-| B | `02_horizon_sweep.py` | run by the gate with `need_tf=False`, so **Part 2 never executes in the gate** and `[ OK ] ADV 02` certifies half of what it is named after |
-| B | `02_budget.py`, `02_horizon_sweep.py` | hardcoded string `18 suites`; the gate runs **28** |
-| B | `02_horizon_sweep.py` | embedded `explain()` report printed **truncated mid-sentence** (`We say what it costs and what`) — the slice is by line count |
-| C | `axiomrnn.py` (not an example) | `explain()` prints its report **twice**; `axiomrnn-explain --budget 6gb` gives 162 lines = one 81-line report, twice |
-| F | `13_when_not_to_use.py:54-56` | prints `0.9981 / 0.9912 / 0.7444` under a `MEASURED` heading, on bare `python3` with **no TensorFlow**. It cannot have measured them. |
-| F | `05_t9.py:32, :185, :332` | same stale pair, `0.9919 vs 0.9981`, in a third file. Live is `0.9912` against `0.9988` |
-| — | `03_credit_rule.py`, `13_when_not_to_use.py` | both print a live table of `0.3x`…`1.0x` and then assert `17x -> 8.7x` / `17x at T=32` in prose two lines below it. **No command produces `17x`.** |
+| # | file | defect | state |
+|---|---|---|---|
+| A | `04_equal_budget.py` | was **not a gate suite** while a comment claimed every example was one | **fixed** — it is `EXAMPLE 04` in the table, with a `DECOMPOSITION BY CAUSE` marker |
+| B | `02_horizon_sweep.py` | run with `need_tf=False`, so Part 2 never executed and `[ OK ]` certified half of what the suite is named after | **fixed** — it now runs on the discovered TensorFlow interpreter and requires `PART 2 -- MEASURED QUALITY` in its output |
+| B | `02_budget.py`, `02_horizon_sweep.py` | hardcoded string `18 suites`; the gate ran 28, then 31 | **fixed** — the count is read out of `tests/run_all.py` at run time |
+| B | `02_horizon_sweep.py` | embedded `explain()` report printed **truncated mid-sentence** — the gate keeps only lines matching `PASS`/`ok]`/`Error`/`Traceback`/`SKIPPED`, and the report is prose | **open, and it is a property of the gate's console filter, not of this file.** The example itself prints correctly; what the gate echoes is a subset |
+| C | `axiomrnn.py` (not an example) | `explain()` prints by default *and* returns the report, so `print(spec.explain(...))` printed the whole 81-line report twice — 162 lines | **fixed** — pass `verbose=False` and print the return value once |
+| D | `axplan/memory.py` | **`credit_rule="local"` was answered with BPTT arithmetic**, because the bare string `"local"` never satisfied an `is CreditRule.LOCAL` dispatch. The local rule reported `depends_on_T=True`, `quality_kept=1.0` | **fixed** — `credit_bytes()` normalises through the enums; reproduced against the published 0.1.1 wheel in `CHANGELOG.md` |
+| E | `axplan/memory.py` | **the BPTT tape was capped at the credit horizon**, so `analyse()` returned an identical peak at `T=100` and `T=400`. Every `needed` figure above was an underestimate | **fixed** — the peaks in this file were re-measured after the fix |
+| F | `13_when_not_to_use.py:54-56` | prints `0.9981 / 0.9912 / 0.7444` under a `MEASURED` heading, on bare `python3` with **no TensorFlow**. It cannot have measured them. | **open** — quoted numbers, not recomputed by that script |
+| F | `05_t9.py:32, :185, :332` | same stale pair, `0.9919 vs 0.9981`, in a third file | **open** — same |
+| — | `03_credit_rule.py`, `13_when_not_to_use.py` | both print a live table of `0.3x`…`1.0x` and then assert `17x -> 8.7x` / `17x at T=32` in prose two lines below it. **No command produces `17x`.** | **open** — the prose contradicts the table directly above it |
 
-None of the eight changes what the examples *conclude*. Every one of them
-changes how much a reader can trust a specific figure, which is the whole
-subject of this file.
+**D and E changed published numbers**, which is why the budget tables at the
+top of this file are larger than in any earlier copy: width 12288 needs
+13.84 GiB where it previously reported 4.38, and the wall on a 6 GB card moved
+from width 20480 to 12288. An older copy of this file understates every peak.
+
+None of these changes what the examples *conclude*. Each changes how much a
+reader can trust a specific figure, which is the whole subject of this file.
 
 ---
 

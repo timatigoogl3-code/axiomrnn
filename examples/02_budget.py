@@ -23,7 +23,7 @@ How this differs from the alternatives:
   ONNX        does not accept a budget at all
 
 Here the budget is the input and the answer is human-readable: "at 6 GB
-there is 4.12 usable, this network needs 0.78, credit horizon 66".
+there is 4.12 usable, this network needs 1.57, credit horizon 66".
 
 ════════════════════════════════════════════════════════════════════════
 WHY THIS FILE RUNS WITHOUT TENSORFLOW
@@ -92,8 +92,11 @@ print()
 # numbers rather than an invented toy.
 print("  " + "-" * 72)
 print("  Now the width grows -- and the budget starts to matter.")
-print("  Notice: everything up to width 16384 fits in 6 GB, beyond that")
-print("  it does not.")
+# Stated as a rule, not as a number copied out of the table below, because the
+# table moved when the BPTT tape stopped being capped at the credit horizon and
+# a hardcoded boundary is how "fits up to 16384" outlived the arithmetic.
+print("  Notice: the wall arrives somewhere between width 4096 and 12288,")
+print("  and the planner finds it on its own rather than being told.")
 print()
 print(f"  {'width':<10}{'needed GiB':>12}{'6 GB':>9}{'80 GB':>9}")
 
@@ -114,8 +117,14 @@ for width in (1024, 4096, 12288, 16384, 20480, 24576):
 first_bad = next((w for w, p in rows if p.infeasible), None)
 print()
 if first_bad is not None:
-    print(f"  The planner found on its own that at 6 GB the network stops")
-    print(f"  fitting from width {first_bad}. Narrowing to 16384 works -- and")
+    # The last width that fit, read back out of the table rather than written
+    # here. When the BPTT cap was fixed this line used to name 16384, which had
+    # stopped being true, and nothing caught it because the sweep above it was
+    # correct and the sentence below it was not.
+    ok_widths = [w for w, p in rows if not p.infeasible]
+    last_ok = max(ok_widths) if ok_widths else None
+    print("  The planner found on its own that at 6 GB the network stops")
+    print(f"  fitting from width {first_bad}. Width {last_ok} works -- and")
     print("  that was computed, not eyeballed.")
 print()
 print("  One and the same line of code. Different budgets give different")
@@ -232,5 +241,7 @@ print("""
 """)
 
 # ══════════════════════════════════════════════════════════ THE FULL REPORT ══
+# verbose=False: explain() prints by default AND returns the report, so
+# print(explain(...)) emitted the whole thing twice, identically.
 print("  " + "=" * 72)
-print(spec.explain(ax.Budget.consumer_6gb(), batch=32))
+print(spec.explain(ax.Budget.consumer_6gb(), batch=32, verbose=False))

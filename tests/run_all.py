@@ -35,17 +35,34 @@ def find_tensorflow_python():
     passed, which is the one failure mode this gate exists to prevent.
 
     So the interpreter is discovered, and a candidate is only accepted once it
-    has been seen to import tensorflow. Order matters: the interpreter running
-    the gate is tried first, then the usual virtualenv locations.
+    has been seen to import tensorflow. Order matters: an explicit override
+    first, then the interpreter running the gate, then the usual virtualenv
+    locations, then the per-user ones.
+
+    Returns (path_or_None, places_looked_in). The places matter as much as the
+    answer: "no TensorFlow" and "I did not know where to look" are different
+    findings, and reporting only the first is how a machine with a working
+    TensorFlow install ends up reported as having none.
     """
+    import glob
     import subprocess
 
+    home = os.path.expanduser("~")
     candidates = [
+        # Explicit override. The only way to name an interpreter this function
+        # cannot guess, e.g. a conda env or one created by a colleague.
+        os.environ.get("AX_TF_PY"),
         sys.executable,
+        os.environ.get("VIRTUAL_ENV") and os.path.join(
+            os.environ["VIRTUAL_ENV"], "bin", "python"),
         os.path.join(ROOT, ".venv", "bin", "python"),
         os.path.join(ROOT, "venv", "bin", "python"),
         shutil.which("python3") or "python3",
     ]
+    # Per-user venv collections. Sorted so the printed answer is stable and a
+    # reader can tell which one was chosen.
+    candidates += sorted(glob.glob(os.path.join(home, ".venvs", "*", "bin",
+                                               "python")))
     # Keep order, drop repeats: two candidates can resolve to one interpreter.
     seen, ordered = set(), []
     for c in candidates:
@@ -54,6 +71,8 @@ def find_tensorflow_python():
             ordered.append(c)
 
     for cand in ordered:
+        if not (os.path.isfile(cand) and os.access(cand, os.X_OK)):
+            continue
         try:
             done = subprocess.run(
                 [cand, "-c", "import tensorflow"],
@@ -62,19 +81,31 @@ def find_tensorflow_python():
         except (OSError, subprocess.SubprocessError):
             continue
         if done.returncode == 0:
-            return cand
-    return None
+            return cand, ordered
+    return None, ordered
 
 
-TF_PY = find_tensorflow_python()
+TF_PY, TF_CANDIDATES = find_tensorflow_python()
 
 SUITES = [
     ("GATE (numpy core, gradient proven)", ["python3", "-W", "ignore",
                                               "axon/gate.py"], False),
     ("PLANNER (DP optimal vs brute force)", ["python3", "-W", "ignore",
                                                    "tests/test_planner.py"], False),
-    ("MEMORY MODEL (31 tests, Korthikanti)", ["python3", "-W", "ignore",
-                                                       "../verify/test_cost.py"], False),
+    # Was `../verify/test_cost.py` -- a file outside this repository, absent
+    # from the wheel and the sdist, which began with `sys.path.insert(0,
+    # '/home/cune')` and imported `axon.cost` from /home/cune/axon/cost.py.
+    # Its green checks therefore certified a module no installation contains,
+    # and on a fresh clone, including every GitHub runner, the suite could not
+    # run at all. It also tested a stale predecessor of axplan/memory.py, so
+    # it missed both credit-rule defects now pinned in tests/test_memory.py.
+    #
+    # The marker is the suite's own summary line. A count in the label would
+    # be a claim about a file that can change without this table changing,
+    # which is how "31 tests" outlived the 38 lines the suite printed.
+    ("MEMORY MODEL (arithmetic, regimes, codec, credit rules)",
+     ["python3", "-W", "ignore", "tests/test_memory.py"], False,
+     ["ALL 101 CHECKS PASSED"]),
     ("CREDIT RULES (e-prop vs BPTT, quality price)",
      ["python3", "-W", "ignore", "tests/test_credit.py"], False),
     ("TF CORE (gradient, normalisation, custom cell)",
@@ -153,8 +184,14 @@ SUITES = [
     # gate ran it on plain python3, the guard fired, and the suite reported
     # [ OK ] having skipped half of itself. A suite that quietly drops a
     # section and still passes green is worse than one that fails.
-    ("ADV 02 (horizon sweep, both parts)", ["python3", "-W", "ignore",
-                                           "examples/advanced/02_horizon_sweep.py"],
+    #
+    # It was then registered need_tf=True while still naming "python3" as its
+    # interpreter, which cannot import tensorflow on this machine -- the
+    # system python3 is 3.14 and TensorFlow has no 3.14 wheel. So it skipped
+    # every run. It now names the discovered interpreter, and the marker
+    # asserts that the quality section actually printed.
+    ("ADV 02 (horizon sweep, both parts)", [TF_PY, "-W", "ignore",
+                                            "examples/advanced/02_horizon_sweep.py"],
      True, ["PART 2 -- MEASURED QUALITY"]),
     ("ADV 03 (credit rule, the real lever)",
      ["python3", "-W", "ignore",
@@ -228,15 +265,27 @@ def run(name, argv, need_tf, expect=None):
     print(name)
     print("=" * 74)
     exe = argv[0]
-    if need_tf and (TF_PY is None or not os.path.exists(exe)):
+    # Is the interpreter this suite names actually runnable here? Asked
+    # separately from the TensorFlow question, because conflating them is how
+    # ADV 02 came to skip on every machine: a bare command name like
+    # "python3" is resolved through PATH, so os.path.exists() on it is always
+    # False, and that answer was being read as "no TensorFlow".
+    resolved = exe if (exe and os.path.sep in exe) else shutil.which(exe or "")
+    if resolved is None:
+        print(f"  SKIPPED: {exe!r} is not a runnable interpreter on this "
+              f"machine.")
+        print("  This is NOT a pass.")
+        return "SKIP"
+    if need_tf and TF_PY is None:
         # Wording matters more than usual here. The previous version printed
         # "Only this suite needs TensorFlow", which is true of one suite and
         # false of the twenty that follow: on a machine with no TensorFlow the
         # gate skipped most of itself and still came back green. It now says how
         # many suites are being skipped, because a skipped suite is a check that
         # did not run.
-        print(f"  SKIPPED: no interpreter with TensorFlow was found (looked for "
-              f"tensorflow in {sys.executable} and ./.venv/bin/python)")
+        print(f"  SKIPPED: no interpreter with TensorFlow was found (tried "
+              f"{len(TF_CANDIDATES)} interpreter"
+              f"{'s' if len(TF_CANDIDATES) != 1 else ''})")
         print("  This is NOT a pass. The suites needing TensorFlow did not run, and")
         print("  the gate below will say how many. Install it with:")
         print("      pip install -e '.[dev]'")
@@ -339,8 +388,20 @@ def main():
     if gate is None:
         return 2
     print(f"python: {PY}")
-    print(f"TF venv: {TF_PY} "
-          f"({'found' if os.path.exists(TF_PY) else 'MISSING'})")
+    # os.path.exists(None) raised TypeError, so a machine with no TensorFlow
+    # anywhere -- the exact case find_tensorflow_python() was written for --
+    # got a traceback instead of a report, and the gate could not run at all
+    # where it most needed to say "20 suites did not run". The interpreter is
+    # only stat()ed when one was actually found.
+    if TF_PY is None:
+        print("TF venv: NONE FOUND. Every suite needing TensorFlow will be "
+              "reported SKIPPED, which is NOT a pass.")
+        print("  looked in:")
+        for c in TF_CANDIDATES:
+            print(f"    {c}")
+        print("  to point the gate at one: AX_TF_PY=/path/to/python")
+    else:
+        print(f"TF venv: {TF_PY} (found by importing tensorflow in it)")
     results = []
     # A suite entry is (name, argv, need_tf) or (name, argv, need_tf, expect).
     # The unpacking tolerates both so an entry can gain evidence markers

@@ -223,6 +223,33 @@ class SpikingRNN:
                 f"norm_t={self.norm_t}, k={self.credit_k})")
 
 
+def _gate_suite_count() -> int | None:
+    """How many suites the gate declares, or None if that cannot be read.
+
+    Parsed, not imported: `tests/` is not a package, and `import
+    tests.run_all` binds to whichever unrelated `tests` package sits earlier
+    on sys.path. ast.parse reads the literal without executing the gate.
+    """
+    import ast
+    import os
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "tests", "run_all.py")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+    except (OSError, SyntaxError, ValueError):
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets
+                     if isinstance(t, ast.Name)]
+            if "SUITES" in names and isinstance(node.value, (ast.List,
+                                                             ast.Tuple)):
+                return len(node.value.elts)
+    return None
+
+
 def _split_layer_kwargs(layer_cls, candidates: dict):
     """Split `candidates` into the names `layer_cls` accepts and the ones it does not.
 
@@ -535,8 +562,25 @@ def explain_budget(model: Model, budget: Budget, batch: int = 32,
     A("    axon/gate.py           gradient = derivative of the smooth model")
     A("                          (rel 1e-8); 1/T normalisation; DP planner")
     A("                          optimal vs exhaustive search; calibration")
-    A("    tests/run_all.py       18 suites: memory model, credit rules, TF")
-    A("                          kernel, Keras assembly, API audit, kernels")
+    # The count is read out of the gate's own table at run time. It used to be
+    # the literal "18 suites" here while the gate ran 28, and then 31: the
+    # number went stale twice because a human typed it once and nobody had a
+    # reason to touch this line again.
+    #
+    # It is parsed rather than imported on purpose. `import tests.run_all`
+    # resolves against whatever `tests` package happens to be on sys.path
+    # first -- on this machine that is an unrelated installed package, and
+    # the import walks into torch. tests/ is not a package and should not
+    # become one. ast.parse reads the literal without executing anything.
+    _n = _gate_suite_count()
+    if _n is None:
+        A("    tests/run_all.py       the gate: memory model, credit rules,")
+        A("                          TF kernel, Keras assembly, API audit")
+        A("                          (suite count unavailable from here)")
+    else:
+        A(f"    tests/run_all.py       {_n} suites: memory model, credit")
+        A("                          rules, TF kernel, Keras assembly,")
+        A("                          API audit, kernels")
     A("    examples/04            spiking vs dense, honest comparison")
     A("                          => PARITY, never superiority. The readout,")
     A("                          not the spikes, dominates the gap.")
@@ -625,7 +669,11 @@ def main_explain(argv=None) -> int:
         m.add_spiking(a.width, horizon=a.horizon)
     m.add_dense(a.classes)
 
-    print(m.explain(pick(), batch=a.batch))
+    # verbose=False, because explain_budget prints by default AND returns the
+    # same report. `print(m.explain(...))` therefore printed the whole 81-line
+    # report twice, identically: a 162-line file in which the reader has to
+    # work out that the second half is a copy. Print the returned value once.
+    print(m.explain(pick(), batch=a.batch, verbose=False))
 
     if a.gate:
         ok, out = gate_report()

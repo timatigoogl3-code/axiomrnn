@@ -102,6 +102,20 @@ not in the wheel — but it must not be left ambiguous.
 
 **Owner:** Release · **Blocks:** R5
 
+**R1 is now the *only* rung standing between this and a defensible release**,
+and it is closer than this section implies. Measured 2026-10-04: the name is
+claimed, 0.1.0 and 0.1.1 are uploaded, and the wheel is installable. What is
+missing is a release whose *numbers are true*:
+
+| rung | state |
+|---|---|
+| wheel exists and installs in a clean venv | done, 0.1.1 |
+| every shipped subpackage present in the wheel | done — 18 files, all four packages |
+| `axplan` works with no TensorFlow installed | done |
+| gate exits 0 on a machine with TensorFlow | **not verified** — the run that produced the README block predates three fixes to `tests/run_all.py` and skipped one suite |
+| published version free of known defects | **no** — two planner bugs, both fixed on `main`, neither in 0.1.1 |
+| a 0.1.2 on PyPI | blocked on a human with the author's GitHub credentials |
+
 ---
 
 ### R2 · FIVE MINUTES
@@ -233,19 +247,29 @@ Settled so far:
 | Licence | **Apache-2.0** |
 | GitHub account | **undecided** — the account in this environment is not the author's |
 
-**2. The PyPI name — time-critical.** Measured 2026-10-04:
+**2. The PyPI name — RESOLVED 2026-10-04, later than this section was written.**
 
-| Name | Status |
+The table below said `axiomrnn` was available. It no longer is, and the reason
+matters: **this project claimed it.**
+
+| Name | Status, measured 2026-10-04 |
 |---|---|
-| `axiomrnn` | **available** |
-| `axonrnn` | available |
-| `axoncortex` | available |
-| `neuroarch` | **taken** — another project, 2023 |
+| `axiomrnn` | **TAKEN BY US.** `https://pypi.org/pypi/axiomrnn/json` → 200, author `Cubetitled`, releases `0.1.0` (11:27:41Z) and `0.1.1` (11:54:53Z) |
+| `axonrnn` | available (`/pypi/axonrnn/json` → 404) |
+| `axoncortex` | not re-checked; irrelevant now |
 
-`axiomrnn` is unclaimed. **It can be taken by anyone at any moment, and once
-claimed it is gone permanently.** Every day of delay is a day the best available
-name is gambled away. This does not authorize publishing — it means the *decision*
-should not sit idle while the other phases run.
+So the gambling risk this section warned about did not materialize, and no
+decision is pending. What *is* pending is a **0.1.2**, because 0.1.1 as
+published contains two planner defects that return wrong numbers without
+raising: `credit_rule="local"` was answered with BPTT arithmetic, and peak
+memory was capped at the credit horizon so `T=100` and `T=400` cost the same.
+Both are fixed on `main` and pinned by regression checks in
+`tests/test_memory.py`. Full detail in `CHANGELOG.md`.
+
+The remaining PyPI blocker is credential-based, not a decision: the upload
+proceeds through Trusted Publishing from a GitHub release, and this
+environment's `gh` is authenticated as `timatigoogl3-code`, a third party.
+Nobody here can cut the tag or create the release that triggers it.
 
 **3. License. RESOLVED — Apache-2.0**, chosen 2026-10-04 over GPLv3.
 
@@ -265,6 +289,23 @@ the adoption cost.
 and in the `authors` / `maintainers` fields of `pyproject.toml`. The two
 attributions are kept in step deliberately: an artifact whose LICENSE and whose
 package metadata disagree is worse than one with neither.
+
+---
+
+**5. `pyproject.toml` points at the wrong repository. RESOLVED 2026-10-04.**
+All four `[project.urls]` read `https://github.com/timatigoogl3-code/axiomrnn`
+while `git remote -v` says `https://github.com/cubetitled-ui/axiomrnn.git`.
+`timatigoogl3-code` is the third-party account this environment's `gh` happens
+to be authenticated as — the same mistake Decision 1 warns about, committed a
+second time in the metadata rather than in a document. Corrected, and the
+correction is verified against the wheel's `METADATA` rather than against
+`pyproject.toml`, because a source file can look right and still not be what
+shipped.
+
+**6. `LICENSE` copyright name.** Confirm it says `Cubetitled` and not the GitHub
+handle. Decision 4 covers this; the wheel carries
+`License-Expression: Apache-2.0` and `License-File: LICENSE`, so the only thing
+left to check by eye is the name inside the file.
 
 ---
 

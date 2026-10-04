@@ -25,8 +25,11 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
+import subprocess
 import sys
 import traceback
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -305,6 +308,20 @@ def test_axiomrnn_api():
     check("local_quality is callable and range-guarded",
           ax.local_quality(60) is not None and ax.local_quality(5000) is None)
 
+    # The suite count printed in the report used to be the literal "18" and was
+    # wrong twice. It is now read from the gate's table, so the thing to assert
+    # is that the number in the report equals the number of suites that exist.
+    n_declared = ax._gate_suite_count()
+    check("the gate's suite count can be read", isinstance(n_declared, int)
+          and n_declared > 0, f"got {n_declared!r}")
+    spec = ax.Model()
+    spec.add_spiking(64, horizon=8)
+    spec.add_dense(4)
+    report = spec.explain(ax.Budget.consumer_8gb(), verbose=False)
+    check("the report states the suite count the gate actually has",
+          f"{n_declared} suites" in report,
+          f"expected {n_declared} suites in the report")
+
 
 # ══════════════════════════════════════════════ axon reference ═════════════
 
@@ -456,6 +473,89 @@ def test_axtf_api():
           getattr(loss, "from_logits", False) is True)
 
 
+# ═════════════════════════════════════ shipped metadata vs the git remote ══════
+#
+# The 0.1.1 wheel advertised Source/Documentation/Issues/Changelog under
+# timatigoogl3-code/axiomrnn -- a third party's account -- while `git remote`
+# said cubetitled-ui. Every other suite here calls functions and checks
+# behaviour, so nothing in the gate was looking at a string, and a wrong URL on
+# a PyPI page is invisible to a test that never reads one. tomllib is stdlib
+# from 3.11; the package supports 3.10, so the read is skipped rather than
+# faked on the oldest supported interpreter.
+
+def test_metadata_points_at_this_repository():
+    try:
+        import tomllib
+    except ImportError:
+        skip("project.urls names the repository this project lives in",
+             "tomllib needs Python 3.11+, and this is 3.10")
+        return
+
+    root = Path(__file__).resolve().parent.parent
+    try:
+        with open(root / "pyproject.toml", "rb") as fh:
+            cfg = tomllib.load(fh)
+    except (OSError, ValueError) as exc:
+        check("pyproject.toml is readable", False, str(exc))
+        return
+
+    urls = cfg.get("project", {}).get("urls", {})
+    check("pyproject.toml declares project.urls", bool(urls),
+          f"found {sorted(urls)}")
+
+    # The repository the project is actually in. Read from git when available,
+    # because a test that hardcodes the expected value would have passed while
+    # the remote itself was wrong -- which is the failure being guarded.
+    expected = "cubetitled-ui/axiomrnn"
+    try:
+        rem = subprocess.run(["git", "-C", str(root), "remote", "get-url",
+                              "origin"], capture_output=True, text=True,
+                             timeout=30)
+        if rem.returncode == 0 and rem.stdout.strip():
+            url = rem.stdout.strip()
+            if "github.com" in url:
+                expected = url.split("github.com", 1)[1].lstrip(":/").removesuffix(".git")
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    for key, value in sorted(urls.items()):
+        check(f"project.urls.{key} names {expected}",
+              expected in value, f"got {value}")
+        check(f"project.urls.{key} does not name a third-party account",
+              "timatigoogl3-code" not in value, f"got {value}")
+
+    # Attribution has to agree with the LICENSE, which ships in the wheel.
+    authors = cfg.get("project", {}).get("authors", [])
+    names = [a.get("name", "") for a in authors]
+    check("pyproject.toml names an author", any(names), f"got {names}")
+    lic = (root / "LICENSE").read_text(encoding="utf-8", errors="replace")
+    check("the LICENSE copyright matches the package author",
+          all(n in lic for n in names if n), f"authors {names}")
+
+    # Classifiers are a promise about interpreters; requires-python is the
+    # contract. 0.1.1 advertised 3.14 while capping at <3.14.
+    spec = cfg.get("project", {}).get("requires-python", "")
+    nums = re.findall(r"3\.(\d+)", spec)
+    lo = int(nums[0]) if nums else 0
+    hi = int(nums[1]) if len(nums) > 1 else 99
+    bad = []
+    for c in cfg.get("project", {}).get("classifiers", []):
+        m = re.match(r"Programming Language :: Python :: 3\.(\d+)", c)
+        if m and not (lo <= int(m.group(1)) < hi):
+            bad.append(c)
+    check("every Python classifier is inside requires-python",
+          not bad, f"requires-python {spec}; outside it: {bad}")
+
+    # The dependency that makes this a framework rather than a planner.
+    check("TensorFlow is a required dependency, not an extra",
+          any(d.startswith("tensorflow") and "extra ==" not in d
+              for d in cfg["project"]["dependencies"]),
+          f"got {cfg['project']['dependencies']}")
+    check("numpy is required", any(d.startswith("numpy")
+                                   for d in cfg["project"]["dependencies"]),
+          f"got {cfg['project']['dependencies']}")
+
+
 # ══════════════════════════════════════════════ runner ════════════════════
 
 def main():
@@ -464,7 +564,8 @@ def main():
     print("=" * 74)
 
     for fn in (test_memory_api, test_planner_api, test_credit_api,
-               test_axiomrnn_api, test_axon_api, test_axtf_api):
+               test_axiomrnn_api, test_axon_api, test_axtf_api,
+               test_metadata_points_at_this_repository):
         print(f"\n--- {fn.__name__} ---")
         n0 = len(FAIL)
         try:

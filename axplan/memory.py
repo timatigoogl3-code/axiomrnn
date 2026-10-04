@@ -4,13 +4,27 @@ axplan.memory -- the memory model. The only place with arithmetic.
 Everything else (planner, explain, validation, codec) reads from here and
 never computes bytes on its own.
 
-Verified (moved from axon/cost.py without changing a single number):
-  verify_5  -> memory regime is computable: 96.0% vs 96.5% in ICLR'26
-  verify_2  -> credit horizon for a NEURON (scalar form)
-  verify_4  -> credit horizon for a LAYER (spectral form)
-  verify_12 -> spike densities MEASURED (replacing the invented 0.08)
+Moved from axon/cost.py, which was not in the repository, the wheel or the
+sdist, and so was never tested by anything a user could run.
 
-Tests: axiomrnn/tests/test_memory.py (31 tests, green)
+What that move changed, and it is not only wording:
+  * `backward_bytes` did not exist in axon/cost.py. `analyse` now counts the
+    dense gradient tape inside `activation_fraction`, which moves both cited
+    cases: the conv-SNN case that was quoted as ACTIVATION is now OFFLOAD,
+    and the 1B transformer at T=64 moved from STATIC to BALANCED.
+  * `backward_bytes` was capped at `CreditModel.horizon()`, so peak memory
+    saturated once T passed that horizon. It is now Theta(T*A), as the
+    `credit_rule` field documents.
+  * `credit_rule="local"` reached `credit_bytes` as the bare string 'local'
+    against an `is CreditRule.LOCAL` dispatch, so the local branch was
+    unreachable and every local-rule request was answered with BPTT bytes.
+
+The figures "96.0% vs 96.5% in ICLR'26" that this docstring used to quote
+belonged to the forward-tape-only model and are withdrawn: they are not
+reproducible from this code, and no published document quoted them.
+
+Tests: tests/test_memory.py -- 101 checks, and it prints the two regime
+divergences above as measurements rather than asserting them.
 """
 
 from __future__ import annotations
@@ -18,9 +32,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-
-# Passed to credit.py to avoid a circular import
-_LOCAL = 'local'
 
 GIB = 1 << 30
 
@@ -254,6 +265,33 @@ class BudgetSpec:
     def vram_bytes(self) -> int:
         return int(self.vram_gb * GIB)
 
+    def __post_init__(self) -> None:
+        """Refuse a value we would otherwise guess at.
+
+        `credit_rule` selects between two different arithmetic models, and an
+        unrecognised string used to fall through to BPTT -- so `credit_rule=
+        "elvar"` returned a confident BPTT number with no indication that the
+        word was not understood. A memory planner that answers a question
+        nobody asked is worse than one that declines: the number looks real
+        and the user has no way to know it was fiction.
+        """
+        # Imported here, not at module level, so `import axplan.memory` stays
+        # free of the credit dependency for callers that never plan.
+        from axplan.credit import CreditRule, NeuronModel
+        CreditRule(self.credit_rule)
+        NeuronModel(self.neuron_model)
+        if self.spike_rate <= 0.0:
+            raise ValueError(
+                f"spike_rate must be positive, got {self.spike_rate!r}. "
+                f"Rate 0 would make the tape look free while the dense "
+                f"backward pass is unchanged, which is the one number in this "
+                f"model that must never be understated.")
+        if self.timesteps < 1:
+            raise ValueError(
+                f"timesteps must be at least 1, got {self.timesteps!r}. "
+                f"A horizon of 0 means there is no tape, which is not a "
+                f"network.")
+
 
 def activation_bytes(spec: BudgetSpec) -> int:
     """Activations from the Korthikanti formula, extended to T.
@@ -377,19 +415,33 @@ def backward_bytes(spec: BudgetSpec) -> int:
     38.9% at T=500. Details: axplan/credit.py.
     """
     if spec.credit_rule == "local":
-        from axplan.credit import NeuronModel, credit_bytes
-        nm = NeuronModel(spec.neuron_model)
+        # The enum member, not the bare string. See credit_bytes(): it used
+        # to dispatch on `is CreditRule.LOCAL`, and the string 'local' -- what
+        # this branch used to pass -- is never identical to the enum member,
+        # so every request for the local rule was answered with BPTT
+        # arithmetic and a depends_on_T=True. No import of credit at module
+        # level: it imports this module's siblings, and keeping the import
+        # local means a caller who only wants arithmetic pays nothing.
+        from axplan.credit import CreditRule, NeuronModel, credit_bytes
         return credit_bytes(
-            _LOCAL, nm, spec.connections, spec.timesteps, spec.batch,
+            CreditRule.LOCAL, NeuronModel(spec.neuron_model),
+            spec.connections, spec.timesteps, spec.batch,
             spec.hidden, spec.n_layers, spec.spatial).bytes_total
 
-    k = (spec.credit or CreditModel()).horizon()
-    k = min(k, spec.timesteps)
+    # BPTT stores the full activation tape, so it is Theta(T*A) and grows with
+    # the horizon. It used to be truncated at `CreditModel.horizon()` -- the
+    # number of steps over which credit decays below eps -- which made peak
+    # memory saturate once T passed that horizon: measured, backward_bytes
+    # returned 0.275 GiB at both T=100 and T=256. Two thirds of the horizon
+    # was free, which is the one thing a memory planner must never do. The
+    # credit horizon still sets `MemoryPlan.credit_horizon`; it is a
+    # statement about credit, not about tape length.
     s, b, h, L, a = (spec.seq_len, spec.batch, spec.hidden,
                      spec.n_layers, spec.n_heads)
     per_step = L * h * spec.spatial
     attn = KORTHIKANTI_ATTN_CONST * a * s / max(h, 1)
-    return int(k * b * per_step * (KORTHIKANTI_LINEAR_CONST + attn) * 2)
+    return int(spec.timesteps * b * per_step
+               * (KORTHIKANTI_LINEAR_CONST + attn) * 2)
 
 
 def analyse(spec: BudgetSpec) -> MemoryPlan:
