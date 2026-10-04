@@ -508,9 +508,11 @@ def test_metadata_points_at_this_repository():
     # the remote itself was wrong -- which is the failure being guarded.
     expected = "cubetitled-ui/axiomrnn"
     try:
+        # check=False: a repository with no `origin` remote is not an error
+        # here, it just means the fallback above stands.
         rem = subprocess.run(["git", "-C", str(root), "remote", "get-url",
                               "origin"], capture_output=True, text=True,
-                             timeout=30)
+                             timeout=30, check=False)
         if rem.returncode == 0 and rem.stdout.strip():
             url = rem.stdout.strip()
             if "github.com" in url:
