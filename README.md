@@ -224,8 +224,10 @@ works with no TensorFlow anywhere.
 python3 examples/02_budget.py
 ```
 
-`MEASURED` — exit code 0 in **0.11 s**, **15 MB** peak RSS
-(`/usr/bin/time -f "%e s %M KB peakRSS" python3 examples/02_budget.py`). Its
+`MEASURED` 2026-10-04 — exit code 0 in **0.21–0.50 s** over three runs,
+**16.6 MB** peak RSS (`/usr/bin/time -f "%e s %M KB peakRSS" python3
+examples/02_budget.py`, three consecutive runs; the spread is machine load, not
+the code). An earlier version of this line said `0.11 s` and `15 MB`. Its
 first line of output is the claim being tested:
 
 ```
@@ -354,12 +356,15 @@ output, its date, and its per-suite inventory.
 
 `MEASURED`:
 
-| step | wall clock | blocking download |
-|---|---:|---|
-| clone | seconds | the repository |
-| step 2 — budget as an input | **0.04 s** | none |
-| step 3 — the inverse question | **0.06 s** | none |
-| step 4 — a neuron that fires | **75.2 s** | **1.9 GB** of TensorFlow, on a Python ≤ 3.12 environment |
+| step | wall clock | peak RSS | blocking download |
+|---|---:|---:|---|
+| clone | seconds | — | the repository |
+| step 2 — budget as an input | **0.21–0.50 s** | 16.6 MB | none |
+| step 3 — the inverse question | **0.56 s** | 15.7 MB | none |
+| step 4 — a neuron that fires | **75.2 s** | 641 MB | **1.9 GB** of TensorFlow, on a Python ≤ 3.12 environment |
+
+`MEASURED` 2026-10-04 for steps 2 and 3; step 4's figures are from the earlier
+run quoted above and were not re-timed in this pass.
 
 **What you can genuinely do in under a minute, with no install at all:** run
 `python3 examples/02_budget.py` and `python3

@@ -74,9 +74,9 @@ You get, among other things:
     -> at batch=32 the local rule is ALREADY cheaper.
 ```
 
-`MEASURED` — `python3 examples/02_budget.py`, exit 0 in 0.04 s on Python
-3.14.4 with no TensorFlow installed. That is arithmetic. Nothing imported
-TensorFlow to produce it.
+`MEASURED` 2026-10-04 — `python3 examples/02_budget.py`, exit 0 in 0.21–0.50 s
+over three runs, 16.6 MB peak RSS, on Python 3.14.4 with no TensorFlow
+installed. That is arithmetic. Nothing imported TensorFlow to produce it.
 
 ## 1b. The other direction: what should you build?
 
