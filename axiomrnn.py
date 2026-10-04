@@ -572,15 +572,23 @@ def explain_budget(model: Model, budget: Budget, batch: int = 32,
     # first -- on this machine that is an unrelated installed package, and
     # the import walks into torch. tests/ is not a package and should not
     # become one. ast.parse reads the literal without executing anything.
+    # This block reports how the claims were verified, which is a property of
+    # the *source tree*, not of the installed wheel -- the wheel deliberately
+    # ships no tests/ or examples/, and the sdist that does carry them does not
+    # install alongside it. So a wheel-installed `axiomrnn-explain` says the
+    # commands are in the sdist and stops there, rather than quoting a count it
+    # cannot read.
     _n = _gate_suite_count()
     if _n is None:
         A("    tests/run_all.py       the gate: memory model, credit rules,")
-        A("                          TF kernel, Keras assembly, API audit")
-        A("                          (suite count unavailable from here)")
+        A("                          TF kernel, Keras assembly, API audit,")
+        A("                          every example. Not shipped in the wheel;")
+        A("                          it travels in the sdist. See")
+        A("                          https://github.com/cubetitled-ui/axiomrnn")
     else:
         A(f"    tests/run_all.py       {_n} suites: memory model, credit")
         A("                          rules, TF kernel, Keras assembly,")
-        A("                          API audit, kernels")
+        A("                          API audit, kernels, every example")
     A("    examples/04            spiking vs dense, honest comparison")
     A("                          => PARITY, never superiority. The readout,")
     A("                          not the spikes, dominates the gap.")

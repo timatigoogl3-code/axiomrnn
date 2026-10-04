@@ -77,8 +77,8 @@ Built artifacts, verified locally. These carry the fixes; the published 0.1.1
 does not:
 
 ```
-dist/axiomrnn-0.1.1-py3-none-any.whl    73,910 bytes, 18 files
-dist/axiomrnn-0.1.1.tar.gz             472,158 bytes
+dist/axiomrnn-0.1.1-py3-none-any.whl    75,567 bytes, 18 files
+dist/axiomrnn-0.1.1.tar.gz             481,939 bytes
 ```
 
 `MEASURED` — `python -m build` then `ls -l dist/`, in the repository root. The
@@ -747,7 +747,7 @@ printed above.
 | | |
 |---|---|
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | the same five-minute path, expanded |
-| [`examples/README.md`](examples/README.md) | all 23 examples, each with its real output and the command that produced it |
+| [`examples/README.md`](examples/README.md) | all 22 runnable examples, each with its real output and the command that produced it. (`examples/advanced/_generate.py` is a code generator, not an example, and is excluded from the count.) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | what we deliberately do **not** build, and the four packages |
 | [`docs/UX_RULES.md`](docs/UX_RULES.md) | 24 rules, each grown from a specific failure — §21–§24 are the ones this pass added |
 | [`docs/ATTACKING_THE_QUADRATIC.md`](docs/ATTACKING_THE_QUADRATIC.md) | an independent attack on the premise: replacing the KV cache with a spike-gated fast-weight state |
