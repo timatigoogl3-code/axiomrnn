@@ -67,11 +67,11 @@ plausible numbers:
 - Peak memory was capped at the credit horizon, so `analyse()` returned the same
   peak for `T=100` and `T=400` — two thirds of the horizon charged at no cost.
 
-Both are fixed in `master` and pinned by regression checks in
+Both are fixed on `main` and pinned by regression checks in
 `tests/test_memory.py`. Until a new version is uploaded, **`pip install
-axiomrnn` gives you a planner whose local-credit-rule figures are wrong.**
-Install from the repository, or wait for the next release. This is stated here
-rather than in a changelog because a stranger reads this page and not that.
+axiomrnn` gives you a planner whose credit-rule figures are wrong.** Install
+from the repository, or wait for the next release. This is stated here rather
+than in a changelog because a stranger reads this page and not that.
 
 Built artifacts, verified locally. These carry the fixes; the published 0.1.1
 does not:
