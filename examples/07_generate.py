@@ -82,7 +82,7 @@ def generate(model, tok, seed_text: str, n_tokens: int, temperature: float):
 
     for _ in range(n_tokens):
         x = np.array([ids[-1]], dtype="int32")
-        logits = model.predict(x, verbose=0)[0]
+        logits = np.asarray(model(x, training=False))[0]
         if temperature <= 0:
             nxt = int(np.argmax(logits))
         else:
@@ -109,7 +109,7 @@ def bits_per_word(model, x, y):
     most common word scores well on a repetitive corpus. Bits per word is
     comparable across models and corpora, so it is the number worth quoting.
     """
-    logits = model.predict(x, verbose=0, batch_size=512)
+    logits = np.asarray(model(x, training=False))
     logp = logits - np.log(np.exp(logits - logits.max()).sum(axis=1, keepdims=True)) \
         - logits.max()
     chosen = logp[np.arange(len(y)), y]
@@ -166,7 +166,7 @@ def main():
     secs = time.perf_counter() - t0
 
     on_gpu = bool(tf.config.list_physical_devices("GPU"))
-    acc = float((model.predict(xte, verbose=0, batch_size=512).argmax(1)
+    acc = float((np.asarray(model(xte, training=False)).argmax(1)
                  == yte).mean())
     bpw = bits_per_word(model, xte, yte)
 

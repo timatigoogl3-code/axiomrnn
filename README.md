@@ -52,6 +52,16 @@ Read it before you cite this work.
 pip install axiomrnn
 ```
 
+**Python version.** This package requires Python `>=3.10,<3.14` (TensorFlow 2.21 ships
+wheels only up to Python 3.13). On a machine whose default `python3` is 3.14, create
+a 3.12 virtualenv first, for example with `uv`:
+
+```bash
+uv venv --python 3.12 .venv
+source .venv/bin/activate
+pip install axiomrnn
+```
+
 `MEASURED` 2026-10-04 — `https://pypi.org/pypi/axiomrnn/json` returns 200 with
 releases `0.1.0` (uploaded `11:27:41Z`) and `0.1.1` (`11:54:53Z`). So the name
 is taken by this project and `pip install axiomrnn` installs the code below.
@@ -437,6 +447,29 @@ and `1.24e-04`, and separately checks that the kernel *calls the hook*
 50%, worst 95.6%`). See the gate block below.
 
 ---
+
+## Backends
+
+The framework is not hard-coded to TensorFlow. The TF-specific parts live
+behind a `Backend` abstraction in `backends/`:
+
+- `backends.base.Backend` -- the interface (`name`, `has_backend`,
+  `build_cell`, `build_model`, `compile`, `train`, `predict`, `save`, `load`).
+- `backends.tensorflow.TensorFlowBackend` -- the working backend; it delegates
+  to `axtf`.
+- `backends.torch.TorchBackend` -- an optional skeleton. It is importable
+  even when PyTorch is missing; `has_backend()` reports `False` and the
+  methods raise a clear error until the backend is implemented.
+
+Select a backend on the model:
+
+    model = ax.Model(backend="tensorflow")   # default, backward compatible
+    model = ax.Model(backend="auto")        # try torch, then tensorflow
+    km = model.build(inputs=x, outputs=10)   # delegates to the selected backend
+    km = model.keras_model(inputs=x, outputs=10)  # TF-only alias, kept for compat
+
+`import axiomrnn` still works with numpy alone; backend modules are imported
+lazily so a missing framework is never a hard import error.
 
 ## The silent breaks, including two still published
 

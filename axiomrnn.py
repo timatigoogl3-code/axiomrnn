@@ -85,8 +85,26 @@ except Exception as _e:                     # pragma: no cover
     _HAS_TF = False
     _TF_ERR = str(_e)
 
+# backends -- framework abstraction (lazy: no TF/torch imported here)
+try:
+    from backends import Backend as _Backend
+    from backends import TensorFlowBackend as _TFBackend
+    from backends import TorchBackend as _TorchBackend
+    from backends import get_backend as _get_backend
+    _HAS_BACKENDS = True
+except Exception as _e:                     # pragma: no cover
+    _HAS_BACKENDS = False
+    _Backend = None
+    _TFBackend = None
+    _TorchBackend = None
+    _get_backend = None
+
 __all__ = [
+    "Backend",
     "GIB",
+    "get_backend",
+    "TensorFlowBackend",
+    "TorchBackend",
     "SPARK_RATE_BAND",
     "SPARK_RATE_DEFAULT",
     "SPARK_RATE_NEURON",
@@ -114,6 +132,12 @@ __all__ = [
 ]
 
 GIB = 1 << 30
+
+# public aliases for backend classes (may be None if backends unavailable)
+Backend = _Backend
+TensorFlowBackend = _TFBackend
+TorchBackend = _TorchBackend
+get_backend = _get_backend
 
 
 # ═══ MODEL ═══════════════════════════════════════════════════════════════
@@ -285,6 +309,11 @@ def _layer_kwargs_help(layer_cls) -> str:
     return ", ".join(names) if names else "(none)"
 
 
+class _UnitsError(ValueError, TypeError):
+    """Raised when add_spiking gets an invalid `units` value."""
+    pass
+
+
 class Model:
     """Minimal model layer on top of Keras/TF.
 
@@ -297,12 +326,33 @@ class Model:
     (neuron dynamics) and any layer via subclassing are overridable.
     """
 
-    def __init__(self, cell=None, **layer_kw):
+    def __init__(self, cell=None, backend="tensorflow", **layer_kw):
         self.layers: list = []
         self.cell = cell
+        self.backend = backend
+        self._backend = backend
         self.layer_kw = layer_kw
         self._compiled = None
         self._budget: Budget | None = None
+
+    def _resolve_backend(self, backend=None):
+        name = self.backend if backend is None else backend
+        if _get_backend is None:
+            from backends import get_backend as _gb
+            return _gb(name)
+        return _get_backend(name)
+
+    def build(self, backend=None, inputs=None, outputs=None,
+              compile_model=False, readout="flatten"):
+        be = self._resolve_backend(backend)
+        if not getattr(be, "has_backend", lambda: False)():
+            raise RuntimeError(
+                f"Backend {getattr(be, 'name', backend)!r} is not available.")
+        return be.build_model(self, inputs=inputs, outputs=outputs,
+                              compile_model=compile_model, readout=readout)
+
+    def get_backend(self, backend=None):
+        return self._resolve_backend(backend)
 
     # ── construction ────────────────────────────────────────────────────
     def add(self, layer):
@@ -330,6 +380,20 @@ class Model:
         In other words the advertised ability to extend without forking
         simply did not work through the public API.
         """
+        # units must be a positive integer: a width of 0 or a negative
+        # number is a typo, and a float/str is a contract violation. Fail
+        # fast with a clear message instead of letting it reach Keras.
+        import numbers
+        if isinstance(units, bool) or not isinstance(units, (int, numbers.Integral)):
+            raise _UnitsError(
+                f"add_spiking() requires `units` to be a positive int, "
+                f"got {units!r} ({type(units).__name__}).")
+        if int(units) <= 0:
+            raise _UnitsError(
+                f"add_spiking() requires `units` to be a positive int, "
+                f"got {units!r}.")
+        units = int(units)
+
         merged = {**self.layer_kw, **kw}
         # Keep only what this layer can actually take.
         #
@@ -415,15 +479,22 @@ class Model:
                         not a property of spikes.
 
         Requires TF. Without it you get an honest error, not a silent no-op.
+
+        WARNING: a freshly built model is SILENT -- potentials stay below the
+        default threshold, so nothing spikes and no gradient flows. You MUST
+        call `axtf.build.calibrate_model(km, x, target_rate=...)` (or
+        `layer.calibrate(...)`) before training, otherwise loss saturates at
+        ln(num_classes). Calibration is not optional and is not performed
+        automatically, because it needs sample data `keras_model` does not have.
         """
         if not _HAS_TF:
             raise RuntimeError(
                 "TensorFlow is not installed. axtf is the only layer "
                 f"that needs it: {_TF_ERR}\n"
                 "axplan (memory, planner, explain) works without TF.")
-        from axtf.build import build_keras
-        return build_keras(self, inputs=inputs, outputs=outputs,
-                           compile_model=compile_model, readout=readout)
+        be = self._resolve_backend("tensorflow")
+        return be.build_model(self, inputs=inputs, outputs=outputs,
+                              compile_model=compile_model, readout=readout)
 
     def __repr__(self):
         s = f"Model({len(self.layers)} layers)"
@@ -695,3 +766,91 @@ def main_explain(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main_explain())
+
+# ═══ INFERENCE HELPER ════════════════════════════════════════════════════
+
+def generate(model, tok, seed, n: int = 20, context: int = 6,
+            temperature: float = 0.0):
+    """Greedy/temperature autoregressive generation with a single model call.
+
+    `model` is a compiled-or-not Keras model (the one returned by
+    `build_keras` / `Model.keras_model`). `tok` is a tokenizer exposing
+    `encode(list[str]) -> list[int]` and `decode(list[int]) -> list[str]`
+    (the shape used by `examples/05_t9.py` and `examples/07_generate.py`).
+
+    `seed` may be a string, a list of words, or a list of token ids.
+
+    IMPORTANT: this calls the model directly (`model(x)`) instead of
+    `model.predict(...)`. The model is run with `run_eagerly=True` (see
+    `axtf`), so each step executes a Python loop over time; generation is
+    therefore slow by construction and this function does not hide that. Do
+    not quote its throughput as a benchmark -- use
+    `examples/bench_inference.py` for honest numbers.
+    """
+    import numpy as np
+
+    # Normalise the seed into a list of token ids.
+    if isinstance(seed, str):
+        pieces = seed.split()
+    elif isinstance(seed, (list, tuple)):
+        pieces = list(seed)
+    else:
+        pieces = [seed]
+
+    if pieces and all(isinstance(p, (int, np.integer)) and not isinstance(p, bool)
+                      for p in pieces):
+        ids = [int(p) for p in pieces]
+    else:
+        ids = list(tok.encode([str(p) for p in pieces]))
+
+    if not ids:
+        ids = [0]
+
+    out_words = []
+    for _ in range(int(n)):
+        window = ids[-int(context):]
+        if len(window) < int(context):
+            window = [0] * (int(context) - len(window)) + window
+        x = np.asarray([window], dtype="int32")
+        logits = model(x, training=False)
+        logits = np.asarray(logits)
+        # logits is (batch, vocab) for a single-step model; if it is
+        # (batch, time, vocab) take the last time step.
+        if logits.ndim == 3:
+            logits = logits[:, -1, :]
+        logits = logits[0]
+
+        if temperature is None or temperature <= 0:
+            nxt = int(np.argmax(logits))
+        else:
+            scaled = logits / float(temperature)
+            scaled = scaled - np.max(scaled)
+            p = np.exp(scaled)
+            s = p.sum()
+            if not np.isfinite(s) or s <= 0:
+                nxt = int(np.argmax(logits))
+            else:
+                p = p / s
+                nxt = int(np.random.choice(len(p), p=p))
+
+        ids.append(nxt)
+        decoded = tok.decode([nxt])
+        word = decoded[0] if (isinstance(decoded, (list, tuple)) and decoded) else str(nxt)
+        out_words.append(word)
+
+    return " ".join(out_words)
+
+
+# Alias kept for callers that use the longer name.
+generate_text = generate
+
+
+# keep exports in sync
+try:
+    __all__
+except NameError:
+    __all__ = []
+if "generate" not in __all__:
+    __all__.append("generate")
+if "generate_text" not in __all__:
+    __all__.append("generate_text")

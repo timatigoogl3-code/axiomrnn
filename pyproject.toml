@@ -155,11 +155,22 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["axplan*", "axtf*", "axon*"]
+include = ["axplan*", "axtf*", "axon*", "backends*"]
 exclude = ["tests*", "examples*", "docs*", "axcore*"]
 
 [tool.setuptools.package-data]
 "axtf" = ["*.md"]
+# Shipped alongside the code so a checkout-free install still has the gate
+# and the examples to run. sdist carries them via MANIFEST.in; these entries
+# keep them in the wheel as package data where setuptools can attach them.
+"tests" = ["*.py", "*.lock"]
+"examples" = ["*.py", "*.txt", "*.md", "advanced/*.py"]
+
+[tool.setuptools.data-files]
+# Installed next to the interpreter so `pip install` from the sdist gives
+# direct access to the gate and the examples.
+"tests" = ["tests/*.py", "tests/*.lock"]
+"examples" = ["examples/*.py", "examples/*.txt", "examples/*.md", "examples/advanced/*.py"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ПАРАМЕТРЫ КАЧЕСТВА. Без них «проверено одной командой» ничего не значит.
