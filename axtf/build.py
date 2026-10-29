@@ -29,7 +29,6 @@ fundamentally do not do.
 """
 from __future__ import annotations
 
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
@@ -38,7 +37,6 @@ from .cells import SpikingCell, SpikingRNNCell
 
 class _BuildError(ValueError, TypeError):
     """Raised when build_keras cannot assemble a model."""
-    pass
 
 
 class _Readout(keras.layers.Layer):
@@ -234,6 +232,6 @@ def measure_model(model: keras.Model, x):
     rows = []
     for layer, inp in zip(spiking, per_layer):
         fr, dead = layer.firing_rate(inp)
-        rows.append(dict(layer=layer.name, firing=round(fr, 4),
-                         dead=round(dead, 4)))
+        rows.append({"layer": layer.name, "firing": round(fr, 4),
+                 "dead": round(dead, 4)})
     return rows

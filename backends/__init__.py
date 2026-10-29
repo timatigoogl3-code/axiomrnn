@@ -23,8 +23,9 @@ def get_backend(name_or_instance=None):
             tb = TorchBackend()
             if tb.has_backend():
                 return tb
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).debug("torch backend unavailable: %s", exc)
         from .tensorflow import TensorFlowBackend
         return TensorFlowBackend()
     if name in ("torch", "pytorch", "torchbackend"):

@@ -49,7 +49,7 @@ evidence that e-prop scales to 1B.
 """
 from __future__ import annotations
 
-import math
+import itertools
 from dataclasses import dataclass
 from enum import Enum
 
@@ -119,8 +119,8 @@ class CreditPlan:
         dep = "depends on T" if self.depends_on_T else "T-independent"
         s = [f"credit rule:     {self.rule.value} ({dep})",
              f"neuron:          {self.neuron.value}",
-             f"state:           {self.bytes_total:,} B "
-             f"({self.bytes_per_synapse} B/synapse)"]
+             (f"state:           {self.bytes_total:,} B "
+              f"({self.bytes_per_synapse} B/synapse)")]
         if self.quality_kept is not None:
             s.append(f"quality:         {self.quality_kept:.1%} "
                      f"of full BPTT")
@@ -191,12 +191,12 @@ def local_quality(timesteps: int) -> float | None:
     Returning None means "unknown", and the caller must surface that.
     """
     ts = sorted(FPTT_ACCURACY)
-    lo, hi = ts[0], ts[-1]
+    hi = ts[-1]
     if timesteps > hi:
         return None                      # no data
     if timesteps < 20:
         return 1.0                       # short sequences
-    for a, b in zip(ts, ts[1:]):
+    for a, b in itertools.pairwise(ts):
         if a <= timesteps <= b:
             qa, qb = FPTT_ACCURACY[a], FPTT_ACCURACY[b]
             return qa + (qb - qa) * (timesteps - a) / (b - a)

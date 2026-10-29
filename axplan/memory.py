@@ -179,7 +179,7 @@ class CreditModel:
             return 0                       # contractivity is violated
         if g <= 0.0:
             return 10**9
-        return int(math.ceil(math.log(eps) / math.log(g)))
+        return math.ceil(math.log(eps) / math.log(g))
 
     def contractive(self) -> bool:
         return self.effective_g < 1.0

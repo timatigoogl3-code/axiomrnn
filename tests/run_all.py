@@ -12,8 +12,8 @@ Suites that NEED TensorFlow are marked and skipped with an explicit
 notice -- skipping silently is not allowed.
 """
 import fcntl
-import shutil
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -76,7 +76,7 @@ def find_tensorflow_python():
         try:
             done = subprocess.run(
                 [cand, "-c", "import tensorflow"],
-                capture_output=True, timeout=180,
+                capture_output=True, timeout=180, check=False,
             )
         except (OSError, subprocess.SubprocessError):
             continue
@@ -118,8 +118,8 @@ SUITES = [
      [TF_PY, "-W", "ignore", "tests/test_api_surface.py"], True),
     ("C++ KERNELS (bit-packing, layout)",
      ["/bin/sh", "-c",
-      "cd axcore && g++ -O3 -march=native -std=c++20 -include cstring "
-      "kernels.cpp -o /tmp/axkernels 2>/dev/null && /tmp/axkernels"], False),
+      ("cd axcore && g++ -O3 -march=native -std=c++20 -include cstring "
+       "kernels.cpp -o /tmp/axkernels 2>/dev/null && /tmp/axkernels")], False),
     # Examples inside the tests are a necessity, not belt-and-braces:
     # 01_minimal had already drifted from reality (it failed on import), and
     # the tropa files drifted so far from the core that they became

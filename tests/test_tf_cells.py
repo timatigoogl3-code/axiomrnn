@@ -91,7 +91,6 @@ def test_tf_backward_vs_fd(seed=3, T=5, n_probe=40):
     """
     rng = np.random.default_rng(seed)
     B, DIN, UNITS = 6, 4, 5
-    T = T
     x = rng.normal(0, 1, (B, T, DIN)).astype(np.float32)
     W = rng.normal(0, 1 / np.sqrt(DIN), (DIN, UNITS)).astype(np.float32)
     thr = np.abs(rng.normal(0.5, 0.1, UNITS)).astype(np.float32)
@@ -163,7 +162,7 @@ def test_tf_backward_vs_fd(seed=3, T=5, n_probe=40):
     xt = tf.transpose(tf.constant(x), perm=[1, 0, 2])      # (T,B,DIN)
     dkernel = tf.reshape(tf.einsum("tbi,tbj->ij", xt, Ut), [-1, UNITS]).numpy()
     dx_t = tf.einsum("tbi,ij->tbj", Ut, tf.transpose(layer.kernel))
-    dx = tf.transpose(dx_t, perm=[1, 0, 2])            # (B,T,DIN)
+    tf.transpose(dx_t, perm=[1, 0, 2])            # (B,T,DIN)
 
     # dL/dthr: the direct path
     gthr_direct = -tf.reduce_sum(dLds * dsig, axis=[0, 1])

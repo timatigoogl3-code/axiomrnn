@@ -42,7 +42,7 @@ try:
     #: Why the import failed, empty when TensorFlow is present. Kept because
     #: "No module named X" is more useful than a generic refusal.
     TF_ERROR = ""
-except Exception as exc:  # pragma: no cover - exercised only without TensorFlow
+except Exception as exc:  # pragma: no cover - exercised only without TensorFlow  # noqa: BLE001
     HAS_TF = False
     TF_ERROR = str(exc)
 

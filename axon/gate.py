@@ -215,12 +215,12 @@ def test_calibration(seed=11, target=0.25):
     threshold drifts and the rate becomes an arbitrary number.
     """
     rng = np.random.default_rng(seed)
-    X = rng.normal(0, 1, (64, 32)); y = rng.integers(0, 5, 64)
+    X = rng.normal(0, 1, (64, 32))
     T = 16
     net = SpikingNet([32, 48, 5], rng=rng)
-    fire0, dead0, _ = net.firing(X, T)
+    fire0, _, _ = net.firing(X, T)
     net.calibrate(X, T, target=target)
-    fire1, dead1, pl = net.firing(X, T)
+    fire1, _, pl = net.firing(X, T)
     ok = abs(fire1 - target) < 0.12
     check("threshold calibration hits the target firing rate",
           ok, f"{fire0:.3f} -> {fire1:.3f} (target {target}), "
@@ -258,8 +258,8 @@ def test_credit_truncation(seed=13, T=24, k=4):
     net2.calibrate(X, T, target=0.25)
     _, gf = net2.grads(X, y, T, credit_k=None)
     ns, bad = [], 0
-    for k in (1, 2, 3, 4, 6, 8, 12):
-        _, gk = net2.grads(X, y, T, credit_k=k)
+    for kk in (1, 2, 3, 4, 6, 8, 12):
+        _, gk = net2.grads(X, y, T, credit_k=kk)
         # (g_full - g_k) is the "full information" direction, g_k ours
         inner = float(gk @ (gf - gk))
         ns.append(inner)

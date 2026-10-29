@@ -15,7 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from axplan.credit import (
     ADAM_BYTES_PER_PARAM,
-    FPTT_ACCURACY,
     TRACE_BYTES,
     CreditRule,
     NeuronModel,

@@ -200,10 +200,10 @@ def largest_that_fits(vram_gb: float, *, hidden: int = 8192, n_layers: int = 64,
                         fit_here = cand
                         break
                     last_fail = cand
-                if fit_here is not None:
-                    if best_fit is None or (_capacity(fit_here), fit_here.timesteps) \
-                            > (_capacity(best_fit), best_fit.timesteps):
-                        best_fit = fit_here
+                if fit_here is not None and (best_fit is None or
+                        (_capacity(fit_here), fit_here.timesteps) >
+                        (_capacity(best_fit), best_fit.timesteps)):
+                    best_fit = fit_here
                 if last_fail is not None:
                     overflows.append(last_fail)
 
@@ -269,7 +269,6 @@ def frontier(vram_gb: float, *, hidden: int = 4096, n_layers: int = 16,
 def report(vram_gb: float, **kw) -> str:
     """Human-readable answer, including the failure boundary."""
     best, fail = largest_that_fits(vram_gb, **kw)
-    g = 2 ** 30
     L = []
     L.append(f"CAPACITY OF A {vram_gb:.0f} GiB BUDGET")
     L.append("=" * 62)

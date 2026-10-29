@@ -8,7 +8,7 @@ try:
     import torch as _torch  # noqa: F401
     _HAS_TORCH = True
     _TORCH_ERR = ""
-except Exception as exc:  # pragma: no cover - depends on environment
+except Exception as exc:  # pragma: no cover - depends on environment  # noqa: BLE001
     _HAS_TORCH = False
     _TORCH_ERR = str(exc)
 

@@ -12,16 +12,16 @@ class TensorFlowBackend(Backend):
         try:
             import tensorflow  # noqa: F401
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     def _require(self):
         if not self.has_backend():
             try:
-                from axtf import TF_HINT, TF_ERROR
+                from axtf import TF_ERROR, TF_HINT
                 hint = TF_HINT
                 err = TF_ERROR
-            except Exception:
+            except Exception:  # noqa: BLE001
                 hint = "TensorFlow is required."
                 err = ""
             raise RuntimeError(

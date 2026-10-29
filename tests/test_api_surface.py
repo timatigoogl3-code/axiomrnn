@@ -373,7 +373,7 @@ def test_axon_api():
           abs(l - net.loss(X, y, 8, smooth=True)) < 1e-9)
 
     net.calibrate(X, 8)
-    fire, dead, per_layer = net.firing(X, 8)
+    fire, dead, _ = net.firing(X, 8)
     check("calibrate gives a sane firing rate", 0.0 <= fire <= 1.0, f"{fire:.4f}")
     check("dead fraction in range", 0.0 <= dead <= 1.0, f"{dead:.4f}")
     check("accuracy in range", 0.0 <= net.accuracy(X, y, 8) <= 1.0)
@@ -389,7 +389,6 @@ def test_axon_api():
 
 def test_axtf_api():
     try:
-        import tensorflow as tf
         from tensorflow import keras
     except ImportError as e:
         skip("axtf API surface", f"no TensorFlow: {e}")
@@ -436,7 +435,7 @@ def test_axtf_api():
           f"thr in [{float(onp.asarray(thr_after).min()):.3f}, "
           f"{float(onp.asarray(thr_after).max()):.3f}]")
 
-    fr, dead = layer.firing_rate(X)
+    fr, _ = layer.firing_rate(X)
     check("layer.firing_rate returns a rate in range", 0.0 <= fr <= 1.0, f"{fr:.4f}")
 
     # explicit backward is a public API
@@ -572,7 +571,7 @@ def main():
         n0 = len(FAIL)
         try:
             fn()
-        except Exception:
+        except Exception:  # noqa: BLE001
             traceback.print_exc()
             FAIL.append(f"{fn.__name__}: raised {traceback.format_exc()[-200:]}")
         added = len(FAIL) - n0

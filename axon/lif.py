@@ -193,7 +193,7 @@ class SpikingNet:
     # ── loss ─────────────────────────────────────────────────────────────────
 
     def loss(self, X, y, T, xseq=None, smooth=False):
-        logits, readout, cache = self.forward(X, T, xseq=xseq, smooth=smooth)
+        logits, _, _ = self.forward(X, T, xseq=xseq, smooth=smooth)
         p = np.exp(logits - logits.max(1, keepdims=True))
         p /= p.sum(1, keepdims=True)
         n = X.shape[0] if xseq is None else xseq.shape[1]

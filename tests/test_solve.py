@@ -14,6 +14,7 @@ narrower and checkable:
 
 No quality claim is tested here because the package makes none (UX_RULES 10).
 """
+import itertools
 import os
 import sys
 
@@ -127,7 +128,7 @@ def test_monotone_in_knobs():
         peaks.append(analyse(make_spec(vram_gb=80.0, hidden=h, n_layers=4,
                                       timesteps=16, batch=2)).peak_bytes)
     check("peak is non-decreasing in width",
-          all(b >= a for a, b in zip(peaks, peaks[1:])),
+          all(b >= a for a, b in itertools.pairwise(peaks)),
           f"{[round(p/GIB, 3) for p in peaks]}")
 
     peaks = []
@@ -135,7 +136,7 @@ def test_monotone_in_knobs():
         peaks.append(analyse(make_spec(vram_gb=80.0, hidden=256, n_layers=4,
                                       timesteps=t, batch=2)).peak_bytes)
     check("peak is non-decreasing in horizon",
-          all(b >= a for a, b in zip(peaks, peaks[1:])),
+          all(b >= a for a, b in itertools.pairwise(peaks)),
           f"{[round(p/GIB, 3) for p in peaks]}")
 
     peaks = []
@@ -143,7 +144,7 @@ def test_monotone_in_knobs():
         peaks.append(analyse(make_spec(vram_gb=80.0, hidden=512, n_layers=4,
                                       timesteps=32, batch=b)).peak_bytes)
     check("peak is non-decreasing in batch",
-          all(b_ >= a for a, b_ in zip(peaks, peaks[1:])),
+          all(b_ >= a for a, b_ in itertools.pairwise(peaks)),
           f"{[round(p/GIB, 3) for p in peaks]}")
 
 

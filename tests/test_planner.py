@@ -113,11 +113,10 @@ def test_gap_is_bounded(n=300, seed=11):
             continue
         if dc is not None:
             feasible_conserve += 1
-        if dc is not None and de is not None:
-            if dc.recompute_ns > de[1]:
-                ratios.append(dc.recompute_ns / max(de[1], 1e-9))
-                if dc.recompute_ns > 2.0 * de[1]:
-                    worse += 1
+        if dc is not None and de is not None and dc.recompute_ns > de[1]:
+            ratios.append(dc.recompute_ns / max(de[1], 1e-9))
+            if dc.recompute_ns > 2.0 * de[1]:
+                worse += 1
         if dc is None and de is not None:
             exact_better_only += 1
 
@@ -141,7 +140,7 @@ def greedy_partition(segs, budget):
         return None
     inp = [s.input_bytes for s in segs]
     stored = 0
-    bounds, start = [0], 0
+    bounds = [0]
     for j in range(1, M + 1):
         add = inp[j] if j < M else 0
         if stored + add > room:            # does not fit -> cut here

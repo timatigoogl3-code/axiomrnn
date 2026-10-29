@@ -36,19 +36,14 @@ from axplan.memory import (
     SPARK_RATE_DEFAULT,
     SPARK_RATE_NEURON,
     BudgetSpec,
-    Codec,
-    CreditModel,
     MemoryPlan,
-    Precision,
     Regime,
     activation_bytes,
     analyse,
     best_codec,
 )
 from axplan.planner import (
-    PartitionPlan,
     Segment,
-    brute_force,
     exact_peak,
     plan_partition,
 )
@@ -79,7 +74,7 @@ try:
     from axtf import HAS_TF as _HAS_TF
     from axtf import TF_ERROR as _TF_ERR
     from axtf import SpikingCell, SpikingRNNCell
-except Exception as _e:                     # pragma: no cover
+except Exception as _e:                     # pragma: no cover  # noqa: BLE001
     # axtf itself failed to import, which is a different fault from TensorFlow
     # being absent. Do not mask it as a missing dependency.
     _HAS_TF = False
@@ -92,7 +87,7 @@ try:
     from backends import TorchBackend as _TorchBackend
     from backends import get_backend as _get_backend
     _HAS_BACKENDS = True
-except Exception as _e:                     # pragma: no cover
+except Exception as _e:                     # pragma: no cover  # noqa: BLE001
     _HAS_BACKENDS = False
     _Backend = None
     _TFBackend = None
@@ -100,14 +95,11 @@ except Exception as _e:                     # pragma: no cover
     _get_backend = None
 
 __all__ = [
-    "Backend",
     "GIB",
-    "get_backend",
-    "TensorFlowBackend",
-    "TorchBackend",
     "SPARK_RATE_BAND",
     "SPARK_RATE_DEFAULT",
     "SPARK_RATE_NEURON",
+    "Backend",
     "Budget",
     "BudgetSpec",
     "Candidate",
@@ -119,6 +111,8 @@ __all__ = [
     "SpikingCell",
     "SpikingRNN",
     "SpikingRNNCell",
+    "TensorFlowBackend",
+    "TorchBackend",
     "analyse",
     "best_codec",
     "capacity_frontier",
@@ -126,6 +120,7 @@ __all__ = [
     "exact_peak",
     "explain_budget",
     "gate_report",
+    "get_backend",
     "largest_that_fits",
     "local_quality",
     "plan_partition",
@@ -311,7 +306,6 @@ def _layer_kwargs_help(layer_cls) -> str:
 
 class _UnitsError(ValueError, TypeError):
     """Raised when add_spiking gets an invalid `units` value."""
-    pass
 
 
 class Model:
@@ -700,7 +694,7 @@ def gate_report() -> tuple[bool, str]:
     here = os.path.dirname(os.path.abspath(__file__))
     r = subprocess.run(
         ["python3", "-W", "ignore", os.path.join(here, "axon", "gate.py")],
-        capture_output=True, text=True, timeout=1200)
+        capture_output=True, text=True, timeout=1200, check=False)
     return r.returncode == 0, r.stdout + r.stderr
 
 
@@ -847,7 +841,7 @@ generate_text = generate
 
 # keep exports in sync
 try:
-    __all__
+    __all__  # noqa: B018
 except NameError:
     __all__ = []
 if "generate" not in __all__:

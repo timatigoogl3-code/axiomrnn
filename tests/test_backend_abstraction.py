@@ -11,10 +11,10 @@ import axiomrnn as ax
 
 
 def test_backend_classes_import():
+    from backends import get_backend
     from backends.base import Backend
     from backends.tensorflow import TensorFlowBackend
     from backends.torch import TorchBackend
-    from backends import get_backend
 
     assert Backend is not None
     tfb = TensorFlowBackend()
@@ -23,6 +23,15 @@ def test_backend_classes_import():
     tb = TorchBackend()
     assert tb.name == "torch"
     assert isinstance(tb.has_backend(), bool)
+    assert get_backend is not None
+
+
+def test_default_backend_is_tensorflow():
+    m = ax.Model()
+    assert m.backend == "tensorflow"
+    assert m._backend == "tensorflow"
+    be = m.get_backend()
+    assert be.name == "tensorflow"
 
 
 def test_backend_selection():
@@ -37,15 +46,12 @@ def test_backend_selection():
     assert be.name == "tensorflow"
     be2 = get_backend("auto")
     assert be2.name in ("torch", "tensorflow")
-    try:
-        m.get_backend()
-    except Exception as e:
-        raise AssertionError(str(e))
+    # Resolving a backend that exists must not raise.
+    assert m.get_backend().name == "tensorflow"
 
 
 def test_tf_backend_builds_model():
     try:
-        import tensorflow as tf
         from tensorflow import keras
     except ImportError:
         return
@@ -69,27 +75,81 @@ def test_tf_backend_builds_model():
     assert isinstance(km3, keras.Model)
 
 
+def test_model_build_tensorflow_trainable():
+    try:
+        from tensorflow import keras
+    except ImportError:
+        return
+    spec = ax.Model()
+    spec.add_spiking(8, horizon=4)
+    spec.add_dense(3)
+    km = spec.build(backend="tensorflow",
+                    inputs=keras.Input(batch_shape=(None, 4, 2)),
+                    outputs=3)
+    assert isinstance(km, keras.Model)
+    assert len(km.trainable_variables) > 0
+
+
+def test_get_backend_torch_raises_helpful_error():
+    from backends import get_backend
+
+    be = get_backend("torch")
+    assert be.name == "torch"
+    assert isinstance(be.has_backend(), bool)
+    try:
+        import torch  # noqa: F401
+        torch_available = True
+    except ImportError:
+        torch_available = False
+
+    if not torch_available:
+        try:
+            be.build_model(None)
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc).lower()
+            assert "torch" in msg or "pytorch" in msg
+            assert "pip install" in msg
+        else:
+            raise AssertionError("expected failure when torch missing")
+
+
 def test_torch_backend_import_does_not_crash():
-    import backends.torch as bt
     from backends.torch import TorchBackend
 
     tb = TorchBackend()
     assert tb.name == "torch"
     assert isinstance(tb.has_backend(), bool)
     try:
-        import torch
+        import torch  # noqa: F401
     except ImportError:
+        raised = False
         try:
             tb.build_model(None)
-        except Exception:
-            pass
-        else:
-            raise AssertionError("expected failure when torch missing")
+        except Exception:  # noqa: BLE001
+            raised = True
+        assert raised, "expected failure when torch missing"
+
+
+def test_import_axiomrnn_works_without_tf():
+    # axplan and axon must import with no TensorFlow dependency.
+    import axon
+    import axplan
+
+    assert axplan is not None
+    assert axon is not None
+    # axiomrnn itself must import (it degrades gracefully).
+    import axiomrnn as _ax
+
+    assert _ax is not None
 
 
 if __name__ == "__main__":
     test_backend_classes_import()
+    test_default_backend_is_tensorflow()
     test_backend_selection()
     test_tf_backend_builds_model()
+    test_model_build_tensorflow_trainable()
+    test_get_backend_torch_raises_helpful_error()
     test_torch_backend_import_does_not_crash()
+    test_import_axiomrnn_works_without_tf()
     print("OK")

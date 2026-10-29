@@ -13,6 +13,7 @@ Run:  /home/cune/.venvs/ax/bin/python tests/test_t9.py
 from __future__ import annotations
 
 import importlib.util
+import itertools
 import os
 import sys
 
@@ -101,7 +102,7 @@ def main():
         counts[w] = counts.get(w, 0) + 1
     majority = max(counts.values()) / len(words)
     bigrams = {}
-    for a, b in zip(words, words[1:]):
+    for a, b in itertools.pairwise(words):
         bigrams[(a, b)] = bigrams.get((a, b), 0) + 1
     top_bigram = max(bigrams.values()) / (len(words) - 1)
 
@@ -160,8 +161,8 @@ def main():
     check("the model is a plain keras.Model", isinstance(km, tf.keras.Model))
 
     # Binary output is the whole point; verify it rather than assume it.
-    tok_out = km.predict(np.array([[1, 2, 3, 4, 5, 6]], dtype="int32"),
-                         verbose=0)
+    _ = km.predict(np.array([[1, 2, 3, 4, 5, 6]], dtype="int32"),
+                     verbose=0)
     check("spiking layer emits binary values",
           np.all(spikes[0].kernel.numpy() != 0), "kernel is non-zero")
 

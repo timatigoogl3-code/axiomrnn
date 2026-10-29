@@ -46,12 +46,11 @@ from __future__ import annotations
 import warnings
 
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow.keras.layers import Layer
 
 try:
     from keras.src.backend.common.keras_tensor import keras_tensor
-except Exception:                                   # pragma: no cover
+except Exception:                                   # pragma: no cover  # noqa: BLE001
     keras_tensor = None
 
 
@@ -478,7 +477,7 @@ class SpikingRNNCell(Layer):
                 dtype=self.compute_dtype,
                 sparse=False,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             # This used to be a silent `return spec`, and that was a trap:
             # the shape-parse error was swallowed, the layer emitted
             # (None,None,units), and the failure arrived later in Dense with
@@ -589,7 +588,7 @@ class SpikingRNNCell(Layer):
 
     def get_config(self):
         c = super().get_config()
-        c.update(dict(units=self.units, return_sequences=self.return_sequences,
-                      norm_t=self.norm_t, credit_k=self.credit_k,
-                      learn_threshold=self.learn_threshold))
+        c.update({"units": self.units, "return_sequences": self.return_sequences,
+                  "norm_t": self.norm_t, "credit_k": self.credit_k,
+                  "learn_threshold": self.learn_threshold})
         return c

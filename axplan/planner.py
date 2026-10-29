@@ -46,7 +46,7 @@ is measured in verify_1_dp_v2 (point C) and reported to the user, not hidden.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # ── SEGMENT ───────────────────────────────────────────────────────────────
 
