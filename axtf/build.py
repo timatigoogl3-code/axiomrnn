@@ -155,7 +155,7 @@ def build_keras(spec, inputs=None, outputs=None, compile_model=False,
         m.compile(optimizer="adam",
                   loss=keras.losses.SparseCategoricalCrossentropy(
                       from_logits=True),
-                  metrics=["accuracy"], run_eagerly=True)
+                  metrics=["accuracy"], run_eagerly=False)
     return m
 
 

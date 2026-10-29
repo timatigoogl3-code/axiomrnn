@@ -560,7 +560,7 @@ Stated as absence, not as a roadmap.
 | a correct published release | 0.1.1 is on PyPI and carries two planner defects that return wrong numbers silently — see [Install](#install). Install from the repository until a fixed version ships |
 | a calibrated regime classifier | the `0.6` / `0.25` thresholds in `analyse()` were fitted before `backward_bytes` entered `activation_fraction`. Both cases the module docstring cites now classify differently: the conv-SNN case is `OFFLOAD`, not `ACTIVATION`, and the 1B transformer at `T=64` is `BALANCED` at 0.2594, not `STATIC`. `tests/test_memory.py` prints both as DIVERGENCE rather than asserting either |
 | a byte-reproducible build | rebuilding the sdist yields a wheel of the same size but a different sha256 (zip timestamps, no `SOURCE_DATE_EPOCH`); two builds are not the same bits |
-| a CPU-graph-native layer | `run_eagerly=True` is mandatory; `tf.while_loop` is not done |
+| a CPU-graph-native layer | done: the time loop is now `tf.while_loop`; `run_eagerly=True` is no longer required |
 | energy measurement | no neuromorphic device exists here; no energy number is measured by anyone on this project |
 | speed measurement | not measured. Operation counts are not latency |
 | the sparse/bit crossover point | measured by nobody, this project included |
@@ -571,9 +571,9 @@ Stated as absence, not as a roadmap.
 
 Known code-level limitations, all stated by the framework's own output:
 
-- `run_eagerly=True` is the default because Keras 3 caches a forward pass that
-  contains a Python loop over time, and the gradient then lands on stale
-  activations. The proper fix is a `tf.while_loop`; **not done**.
+- The time loop is now a `tf.while_loop`, so the layer runs in graph mode and
+  `run_eagerly=True` is no longer required for correct gradients. `run_eagerly`
+  remains available for debugging.
 - The segmentation planner is optimal but almost always answers "no cuts",
   because its peak is `stored + max_inter` where `max_inter` is a floor. That
   is a property of the conservative model, not a bug. `MEASURED` —

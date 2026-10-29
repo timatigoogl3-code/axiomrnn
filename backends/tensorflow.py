@@ -60,7 +60,7 @@ class TensorFlowBackend(Backend):
         if "metrics" not in kwargs:
             kwargs["metrics"] = ["accuracy"]
         if "run_eagerly" not in kwargs:
-            kwargs["run_eagerly"] = True
+            kwargs["run_eagerly"] = False
         model.compile(**kwargs)
         return model
 

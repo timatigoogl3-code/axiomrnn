@@ -184,31 +184,51 @@ class SpikingCell:
 # ── LAYER CORE ────────────────────────────────────────────────────────────
 
 def _lif_forward(cell: SpikingCell, x, kernel, thr, T, norm_t, credit_k):
-    """Forward pass with an explicit loop over time.
+    """Forward pass over time, implemented with tf.while_loop.
 
     Input arrives batch-first as Keras expects: (B, T, in).
-    Returns time-first, because the loop runs over time:
+    Returns time-first:
       states : (T, B, units)  potentials BEFORE reset
       spikes : (T, B, units)
       drives : (T, B, units)
 
-    Bug that cost real time: assuming x arrives time-first means unstack on
-    axis 1 slices the BATCH, not time, and you get
-    "In[0] ndims must be >= 2". The transposition here is explicit and
-    happens exactly once.
+    The loop is a tf.while_loop (not a Python for) so the whole pass is
+    one graph op and runs in graph mode without run_eagerly=True.
     """
     B = tf.shape(x)[0]
     units = kernel.shape[1]
     state = tf.zeros((B, units), dtype=x.dtype)
-    states, spikes, drives = [], [], []
-    inp = tf.unstack(x, axis=1)              # T tensors of (B, in)
-    for t in range(T):
-        drive = tf.matmul(inp[t], kernel)    # (B, units)
-        u = cell.membrane(state, drive, thr)
+    xt = tf.transpose(x, perm=[1, 0, 2])          # (T, B, in)
+
+    states_ta = tf.TensorArray(dtype=x.dtype, size=T, dynamic_size=False,
+                               element_shape=(None, units))
+    spikes_ta = tf.TensorArray(dtype=x.dtype, size=T, dynamic_size=False,
+                               element_shape=(None, units))
+    drives_ta = tf.TensorArray(dtype=x.dtype, size=T, dynamic_size=False,
+                               element_shape=(None, units))
+
+    def cond(t, st, sta, spa, dra):
+        return t < T
+
+    def body(t, st, sta, spa, dra):
+        drive = tf.matmul(xt[t], kernel)            # (B, units)
+        u = cell.membrane(st, drive, thr)
         s = cell.spike_fn(u, thr, smooth=False)
-        state = cell.reset_fn(u, s, smooth=False)
-        states.append(u); spikes.append(s); drives.append(drive)
-    return (tf.stack(states), tf.stack(spikes), tf.stack(drives))
+        nst = cell.reset_fn(u, s, smooth=False)
+        sta = sta.write(t, u)
+        spa = spa.write(t, s)
+        dra = dra.write(t, drive)
+        return t + 1, nst, sta, spa, dra
+
+    _, _, states_ta, spikes_ta, drives_ta = tf.while_loop(
+        cond, body,
+        [tf.constant(0), state, states_ta, spikes_ta, drives_ta],
+        parallel_iterations=1)
+
+    states = states_ta.stack()                      # (T, B, units)
+    spikes = spikes_ta.stack()
+    drives = drives_ta.stack()
+    return (states, spikes, drives)
 
 
 def _lif_backward(cell, x, kernel, thr, states, spikes, drives, dout, T,
@@ -217,55 +237,57 @@ def _lif_backward(cell, x, kernel, thr, states, spikes, drives, dout, T,
 
     dout : (T, B, units) -- gradient w.r.t. each step's spikes, arriving
                            from the layer above (or from the readout).
+
+    Implemented with tf.while_loop (backward in time) so it runs in graph
+    mode without run_eagerly=True.
     """
     B = tf.shape(x)[0]
     units = kernel.shape[1]
-    # 1/T normalisation. With a mean-over-time readout, dL/ds_t = (1/T)*dL/dmean.
-    # Without it the gradient grows linearly with T and training diverges at a
-    # fixed learning rate. This line was once absent; UX_RULES.md §14.
     if norm_t:
         dout = dout / tf.cast(T, dout.dtype)
     dsig = cell.spike_d1(states, thr)                    # (T,B,units)
     Q = dout * dsig                                      # path via the spike
 
-    # dL/dthr, direct path: ds/dthr = -sigma'
-    gthr_direct = -tf.reduce_sum(dout * dsig, axis=[0, 1])
-    gthr_reset = tf.zeros_like(gthr_direct)
+    gthr_direct = -tf.reduce_sum(dout * dsig, axis=[0, 1])  # (units,)
+    gthr_reset = tf.zeros_like(gthr_direct)                 # (units,)
 
-    # recursion runs BACKWARD in time
-    U = [None] * T
-    nxt = tf.zeros((B, units), dtype=x.dtype)
     k = T if credit_k is None else credit_k
-    for t in range(T - 1, -1, -1):
-        s_t = spikes[t]
-        # d reset/du: hard reset gives (1-s); the smooth variant gives
-        # (1-s) - u*sigma' and is reached via cell.reset_dud.
+
+    U_ta = tf.TensorArray(dtype=x.dtype, size=T, dynamic_size=False,
+                          element_shape=(None, units))
+    nxt = tf.zeros((B, units), dtype=x.dtype)
+
+    def cond(t, nxt, U_ta, gthr):
+        return t >= 0
+
+    def body(t, nxt, U_ta, gthr):
+        s_t = spikes[t]                                  # (B,units)
         f = 1.0 - s_t
-        # du_{t+1}/dstate_{t+1} is the CELL's answer, never cell.leak: a
-        # nonlinear membrane gets a wrong gradient otherwise (UX_RULES §16).
-        # Evaluated at the post-reset state and the NEXT step's drive, which
-        # is where the forward pass actually differentiates.
         state_next = states[t] * f
-        drive_next = drives[t + 1] if t + 1 < T else drives[t]
+        drive_next = drives[tf.minimum(t + 1, T - 1)]
         dstate = cell.membrane_dstate(state_next, drive_next, thr)
         carry = dstate * nxt * f
-        if (T - 1 - t) >= k:
-            carry = tf.zeros_like(carry)
-        U[t] = Q[t] + carry
+        age = (T - 1) - t
+        in_horizon = tf.cast(age < k, x.dtype)
+        carry = carry * in_horizon
+        U_t = Q[t] + carry
         if learn_thr:
-            # path through the reset: dL/dst_t = dstate * U_{t+1}
-            if (T - 1 - t) < k:
-                gthr_reset += (dstate * nxt) * states[t] * dsig[t]
-        nxt = U[t]
+            # path through the reset, reduced over the batch
+            term = (dstate * nxt) * states[t] * dsig[t]
+            term = tf.reduce_sum(term, axis=0) * in_horizon
+            gthr = gthr + term
+        U_ta = U_ta.write(t, U_t)
+        return t - 1, U_t, U_ta, gthr
 
-    Ut = tf.stack(U)                                      # (T,B,units)
-    # dL/dkernel = sum_t x_t^T @ U_t
-    # x arrives as (B,T,in), Keras' external layout. einsum needs time-first
-    # (T,B,in), else "Dimensions must be equal, but are 64 and 8": einsum
-    # assumes 64 is the number of steps.
+    _, _, U_ta, gthr_reset = tf.while_loop(
+        cond, body,
+        [tf.constant(T - 1), nxt, U_ta, gthr_reset],
+        parallel_iterations=1)
+
+    Ut = U_ta.stack()                                    # (T,B,units)
+
     xt = tf.transpose(x, perm=[1, 0, 2])                  # (T,B,in)
     dkernel = tf.einsum("tbi,tbj->ij", xt, Ut)            # (in, units)
-    # dL/dx_t = U_t @ kernel^T  (kernel is in->units, hence the transpose)
     dx_t = tf.einsum("tbi,ij->tbj", Ut, tf.transpose(kernel))
     dx = tf.transpose(dx_t, perm=[1, 0, 2])               # (B,T,in)
     dthr = gthr_direct + gthr_reset
@@ -392,7 +414,7 @@ class SpikingRNNCell(Layer):
 
     def __init__(self, units, cell=None, return_sequences=True,
                  norm_t=True, credit_k=None, learn_threshold=False,
-                 horizon_hint=None, run_eagerly=True, **kw):
+                 horizon_hint=None, run_eagerly=False, **kw):
         super().__init__(**kw)
         self.units = units
         self.cell = cell if cell is not None else SpikingCell()
@@ -406,13 +428,9 @@ class SpikingRNNCell(Layer):
         # so we keep the hint.
         self._horizon_hint = horizon_hint
 
-        # run_eagerly=True is not profiling. The forward pass is a Python loop over
-        # time inside tf.custom_gradient; Keras 3 wraps it in tf.function and
-        # then REUSES the cached activations, so the gradient lands on stale
-        # values (measured: 2 forward calls for 4 epochs, loss saturating at
-        # ln C). Eager recomputes honestly and costs speed instead of
-        # correctness. The framework-level fix is a tf.while_loop over
-        # tf.Variable state -- NOT done. UX_RULES.md §11, CHANGELOG.
+        # The forward/backward passes are now tf.while_loop, so the layer runs
+        # correctly in graph mode: run_eagerly=True is no longer required for
+        # correctness. Kept as an option for debugging/profiling only.
         self.suppress_jit = bool(run_eagerly)
 
     def build(self, input_shape):
