@@ -15,7 +15,7 @@ build-backend = "setuptools.build_meta"
 # ─────────────────────────────────────────────────────────────────────────────
 [project]
 name = "axiomrnn"
-version = "0.1.1"
+version = "0.2.0"
 description = "Design networks for the memory budget you have: a pure-python planner, plus an extendable recurrent/spiking kernel with verified gradients"
 readme = "README.md"
 # Capped below 3.14, and the cap is measured rather than guessed.

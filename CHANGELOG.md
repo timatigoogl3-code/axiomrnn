@@ -2,6 +2,33 @@
 
 All notable changes. Dates are ISO.
 
+## [0.2.0] — 2026-10-29
+
+### Added
+
+- **Backend abstraction** (`backends/`): `Backend` ABC with `TensorFlowBackend`
+  and a `TorchBackend` skeleton; `Model(backend=...)`, `Model.build()`,
+  `get_backend()`. The TF backend delegates to the existing `axtf`; the torch
+  backend is a documented stub. `axiomrnn` still imports with numpy only.
+- **`generate` / `generate_text`**: greedy (and temperature-based) text
+  generation helper using direct model calls; replaces `model.predict` loops.
+
+### Changed
+
+- **`SpikingRNNCell` forward/backward now run under `tf.while_loop`** (via
+  `tf.TensorArray`). The Python time loop is gone; `run_eagerly` is no longer
+  required for the spiking layer. The threshold-gradient shape fix
+  (`dthr` as `(units,)`) enables learnable thresholds.
+
+### Fixed
+
+- ruff lint clean across `axiomrnn.py`, `axon/`, `axplan/`, `axtf/`, `backends/`,
+  `tests/`.
+
+### Numbers
+
+- Full gate (`tests/run_all.py`) green after the changes.
+
 ## [Unreleased] — 2026-10-04
 
 The published **0.1.1 is defective**. Both planner bugs below return plausible
